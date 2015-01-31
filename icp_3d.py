@@ -1,8 +1,8 @@
 '''
-icp_3d_new.py
+icp_3d.py
 
 Iterative Closest Point algorithm in 3D.
-
+Row-major implementation for Maya.
 '''
 
 import sys
@@ -36,90 +36,94 @@ def GetVertices (path):
 '''
 Return the index of the closest point in the array
 '''
-def closest (arr, pt):
-    diff = arr - pt
-    dist = (diff*diff).sum(1)
+def Closest (dset, pt):
+    disp = dset - pt
+    dist = (disp*disp).sum(1)
     return np.argmin(dist)
 
 '''
 For each point in source, find the closest point in the target. 
 Return the closest points in array
 '''
-def match (source, target):
+def Match (source, target):
     nn = np.zeros(source.shape)
     for i in range(source.shape[0]):
-        #- nn[i,:] = target[closest(target,source[i,:]),:]
-        c = closest(target,source[i,:])
-        nn[i,:] = target[c,:]
-        #- print i,c
-        # Debug - link between points in source and target mesh
-        str = "distanceDimension -sp %f %f %f -ep %f %f %f" % \
-          (source[i,0], source[i,1], source[i,2], \
-          nn[i,0], nn[i,1], nn[i,2])
-        m.mel.eval(str)
+        c = Closest(target,source[i])
+        nn[i] = target[c]
     return nn
+
+'''
+Return the sum of distance between points in 2 datasets
+Assumption: points in 2 datasets are corresponding
+'''
+def Distance (s1, s2):
+    disp = s1 - s2
+    dist = np.sqrt((disp*disp).sum(1))
+    return dist.sum(0)
 
 '''
 Transform source to match target so that the sum sq error is minimum.
 Return Transformation matrix
 '''
-def findTransform (source, target):
+def FindTransform (source, target):
     s_mean = source.mean(0)
     s1 = source - s_mean
     t_mean = target.mean(0)
     t1 = target - t_mean
-    print "s_mean = ", s_mean
-    print "t_mean = ", t_mean
-    #- print s1.shape, t1.shape
-    #- print np.array([s1[0,:]])
-    #- print np.array([t1[0,:]])
-    #- print np.dot(np.array([t1[0,:]]) , np.array([s1[0,:]]).T)
-    #- print np.dot(np.array([t1[0,:]]).T , np.array([s1[0,:]]))
-    W = np.zeros([3,3])
+    #- print "s_mean = ", s_mean
+    #- print "t_mean = ", t_mean
+    dim = source.shape[1]
+    W = np.zeros([dim,dim])
     for i in range(source.shape[0]):
-        W += np.dot(np.array([t1[i,:]]).T , np.array([s1[i,:]]))
-    print "W = \n", W
+        W += np.dot(np.array([t1[i]]).T , np.array([s1[i]]))
+    #- print "W = \n", W
     U, S, VT = np.linalg.svd(W)
-    print "U = \n", U
-    print "S = \n", S
-    print "VT = \n", VT
-
-    R = np.dot(VT, U)    #-- ???
+    #- print "U = \n", U
+    #- print "S = \n", S
+    #- print "VT = \n", VT
+    R = np.dot(U,VT).T    #- Row-major matrix
     t = t_mean - np.dot(s_mean, R)
-    print "R = \n", R
-    print "t = \n", t
-    T = np.identity(4)
-    T[0:3,0:3] = R
-    T[3,0:3] = t
-    print "T = \n", T
+    #print "R = \n", R
+    #print "t = \n", t
 
-    # DEBUG: Tranform with fixed amount
-    #- T = np.identity(4)
-    # Rotate about X axis in row-major matrix form
-    #- T[1,1] = np.cos(1)
-    #- T[1,2] = np.sin(1)
-    #- T[2,1] = -np.sin(1)
-    #- T[2,2] = np.cos(1)
-    # Rotate about Y axis in row-major matrix form
-    #- T[0,0] = np.cos(1)
-    #- T[0,2] = -np.sin(1)
-    #- T[2,0] = np.sin(1)
-    #- T[2,2] = np.cos(1)
-    # Rotate about Z axis in row-major matrix form
-    #- T[0,0] = np.cos(1)
-    #- T[0,1] = np.sin(1)
-    #- T[1,0] = -np.sin(1)
-    #- T[1,1] = np.cos(1)
-    # Translate along X/Y/Z axis in row-major matrix form
-    #- T[3,0] = 40
-    #- T[3,1] = 40
-    #- T[3,2] = 40
+    # Return Rotation and Translation separately
+    return (R,t)
+    # Retun Rotation and Translation in combined matrix
+    #- T = np.identity(dim+1)
+    #- T[0:dim,0:dim] = R
+    #- T[dim,0:dim] = t
+    #print "T = \n", T
+    #- return T
+
+'''
+Return the transformation matrix which align the source to target
+Iteration stops if change in error is less than 'tol' or more than specified number of runs
+'''
+def ICP (source,target,tol,run):
+    dim = source.shape[1]
+    ss = source.copy()
+    err = 100000    # arbitrary large number to start
+    for i in range(run):
+        e = err
+        nn = Match(ss,target)
+        #R,t = FindTransform(source,nn)
+        R,t = FindTransform(source,nn)
+        #print "R = \n", R
+        #print "t = \n", t
+        ss = np.dot(source, R) + t
+        err = Distance(nn,ss)
+        print "err = %f (%2d)" % (err,i)
+        if ((e-err)<tol):
+            break
+    T = np.identity(dim+1)
+    T[0:dim,0:dim] = R
+    T[dim,0:dim] = t
     return T
 
 '''
 Convert Numpy.Array to Maya MMatrix
 '''
-def arrayToMMatrix (arr):
+def ArrayToMMatrix (arr):
     return om.MMatrix((\
     (arr[0,0], arr[0,1], arr[0,2], arr[0,3]), \
     (arr[1,0], arr[1,1], arr[1,2], arr[1,3]), \
@@ -144,16 +148,14 @@ def main():
             tgtPts = GetVertices(tgtPath)
             print ("Source mode has %d vertices" % srcPts.shape[0])
             print ("Target mode has %d vertices" % tgtPts.shape[0])
-            corrPts = match(srcPts,tgtPts)
-            Trans = findTransform(srcPts, corrPts)
+            Trans = ICP(srcPts,tgtPts,0.1,50)
+            t = ArrayToMMatrix (Trans)
+            #print "t = ", t
             transform = om.MFnTransform(srcPath)
             m = transform.transformation().asMatrix()
-            print m
-            t = arrayToMMatrix (Trans)
-            m = m * t
-            print t
-            print m
-            transform.setTransformation(om.MTransformationMatrix(m))
+            #print "m = ", m
+            transform.setTransformation(om.MTransformationMatrix(m*t))
+            #print m*t
 
 # ---- Template code for Maya Plugin Command ---- #
 
