@@ -23,6 +23,9 @@ rotate = 0.0
 translate_x = 2.0
 translate_y = 3.5
 num_nn = 2
+c_fit = 0.1
+c_rigid = 100
+c_smooth = 10
 
 '''
 Global Variables - may move to local variables
@@ -208,10 +211,12 @@ def Jacobian (source, target):
     #-- Omit the global rotation and translation first --#
     #-- arrange of parameters [A00, A01, A10, A11, b0, b1] for each sample point
     src_len = source.shape[0]
-    J = np.zeros([src_len*8,src_len*6])
+    #J = np.zeros([src_len*9,src_len*6])
+    J = np.zeros([src_len*5,src_len*6])
 
     for j in range(src_len):
-        jj = j * 8
+        #jj = j * 9
+        jj = j * 5
         for i in range(src_len):
             ii = i * 6
             if (w[i,j]!=0):
@@ -223,105 +228,137 @@ def Jacobian (source, target):
                 J[jj,ii+3] = 0
                 J[jj,ii+4] = w[i,j]
                 J[jj,ii+5] = 0
+                J[jj] *= c_fit
                 #-- E fit (y)
-                jj += 1
-                J[jj,ii] = 0
-                J[jj,ii+1] = w[i,j] * d[0]
-                J[jj,ii+2] = 0
-                J[jj,ii+3] = w[i,j] * d[1]
-                J[jj,ii+4] = 0
-                J[jj,ii+5] = w[i,j]
+                #jj += 1
+                J[jj+1,ii] = 0
+                J[jj+1,ii+1] = w[i,j] * d[0]
+                J[jj+1,ii+2] = 0
+                J[jj+1,ii+3] = w[i,j] * d[1]
+                J[jj+1,ii+4] = 0
+                J[jj+1,ii+5] = w[i,j]
+                J[jj+1] *= c_fit
         #-- E rigid (a1.T * a2)
-        jj += 1
+        jj += 2
         ii = j * 6
         J[jj,ii] = A[i,1,0]
         J[jj,ii+1] = A[i,1,1]
         J[jj,ii+2] = A[i,0,0]
         J[jj,ii+3] = A[i,0,1]
+        J[jj] *= c_rigid
         #-- E rigid (1 - a1.T * a1)
         jj += 1
         J[jj,ii] = -2 * A[i,0,0]
         J[jj,ii+1] = -2 * A[i,0,1]
+        J[jj] *= c_rigid
         #-- E rigid (1 - a2.T * a2)
         jj += 1
         J[jj,ii+2] = -2 * A[i,1,0]
         J[jj,ii+3] = -2 * A[i,1,1]
+        J[jj] *= c_rigid
+'''
         #-- E smoooth (x)
         jj += 1
         if (j==0):
-            d1 = source[j+1] - source[j]
-            J[jj,ii] = d1[0]
+            jj += 1
+            d = source[j+1] - source[j]
+            J[jj,ii] = d[0]
             J[jj,ii+1] = 0
-            J[jj,ii+2] = d1[1]
+            J[jj,ii+2] = d[1]
             J[jj,ii+3] = 0
             J[jj,ii+4] = 1
             J[jj,ii+5] = 0
             J[jj,ii+6+4] = -1    # b[j+1,0]
             J[jj,ii+6+5] = 0     # b[j+1,1]
+            J[jj] *= c_smooth
         elif (j==(src_len-1)):
-            d1 = source[j-1] - source[j]
-            J[jj,ii] = d1[0]
+            d = source[j-1] - source[j]
+            J[jj,ii] = d[0]
             J[jj,ii+1] = 0
-            J[jj,ii+2] = d1[1]
+            J[jj,ii+2] = d[1]
             J[jj,ii+3] = 0
             J[jj,ii+4] = 1
             J[jj,ii+5] = 0
             J[jj,ii-6+4] = -1    # b[j-1,0]
             J[jj,ii-6+5] = 0     # b[j-1,1]
+            J[jj] *= c_smooth
         else:
-            d1 = source[j-1] - source[j]
-            d2 = source[j+1] - source[j]
-            J[jj,ii] = d1[0] + d2[0]
+            d = source[j-1] - source[j]
+            J[jj,ii] = d[0]
             J[jj,ii+1] = 0
-            J[jj,ii+2] = d1[1] + d2[1]
+            J[jj,ii+2] = d[1]
             J[jj,ii+3] = 0
-            J[jj,ii+4] = 2
+            J[jj,ii+4] = 1
             J[jj,ii+5] = 0
             J[jj,ii-6+4] = -1    # b[j-1,0]
             J[jj,ii-6+5] = 0     # b[j-1,1]
+            J[jj] *= c_smooth
+            jj += 1
+            d = source[j+1] - source[j]
+            J[jj,ii] = d[0]
+            J[jj,ii+1] = 0
+            J[jj,ii+2] = d[1]
+            J[jj,ii+3] = 0
+            J[jj,ii+4] = 1
+            J[jj,ii+5] = 0
             J[jj,ii+6+4] = -1    # b[j+1,0]
             J[jj,ii+6+5] = 0     # b[j+1,1]
+            J[jj] *= c_smooth
         #-- E smoooth (y)
         jj += 1
         if (j==0):
-            d1 = source[j+1] - source[j]
+            jj += 1
+            d = source[j+1] - source[j]
             J[jj,ii] = 0
-            J[jj,ii+1] = d1[0]
+            J[jj,ii+1] = d[0]
             J[jj,ii+2] = 0
-            J[jj,ii+3] = d1[1]
+            J[jj,ii+3] = d[1]
             J[jj,ii+4] = 0
             J[jj,ii+5] = 1
             J[jj,ii+6+4] = 0     # b[j+1,0]
             J[jj,ii+6+5] = -1    # b[j+1,1]
+            J[jj] *= c_smooth
         elif (j==(src_len-1)):
-            d1 = source[j-1] - source[j]
+            d = source[j-1] - source[j]
             J[jj,ii] = 0
-            J[jj,ii+1] = d1[0]
+            J[jj,ii+1] = d[0]
             J[jj,ii+2] = 0
-            J[jj,ii+3] = d1[1]
+            J[jj,ii+3] = d[1]
             J[jj,ii+4] = 0
             J[jj,ii+5] = 1
             J[jj,ii-6+4] = 0     # b[j-1,0]
             J[jj,ii-6+5] = -1    # b[j-1,1]
+            J[jj] *= c_smooth
         else:
-            d1 = source[j-1] - source[j]
-            d2 = source[j+1] - source[j]
+            d = source[j-1] - source[j]
             J[jj,ii] = 0
-            J[jj,ii+1] = d1[0] + d2[0]
+            J[jj,ii+1] = d[0]
             J[jj,ii+2] = 0
-            J[jj,ii+3] = d1[1] + d2[1]
+            J[jj,ii+3] = d[1]
             J[jj,ii+4] = 0
-            J[jj,ii+5] = 2
+            J[jj,ii+5] = 1
             J[jj,ii-6+4] = 0     # b[j-1,0]
             J[jj,ii-6+5] = -1    # b[j-1,1]
+            J[jj] *= c_smooth
+            jj += 1
+            d = source[j+1] - source[j]
+            J[jj,ii] = 0
+            J[jj,ii+1] = d[0]
+            J[jj,ii+2] = 0
+            J[jj,ii+3] = d[1]
+            J[jj,ii+4] = 0
+            J[jj,ii+5] = 1
             J[jj,ii+6+4] = 0     # b[j+1,0]
             J[jj,ii+6+5] = -1    # b[j+1,1]
+            J[jj] *= c_smooth
+'''
 
 def Residual (source, target):
     global A, b, w, J, r
     global dd, nn
     src_len = source.shape[0]
-    r = np.zeros(src_len*7)
+    #r = np.zeros(src_len*9)
+    r = np.zeros(src_len*5)
 
     dd = Deform(source)
     nn = Match(dd,target)
@@ -329,28 +366,33 @@ def Residual (source, target):
     print (diff*diff).sum()
 
     for j in range(src_len):
-        jj = j * 7
+        #jj = j * 9
+        jj = j * 5
         # E-fit
-        r[jj] = diff[j,0]
-        r[jj+1] = diff[j,1]
+        r[jj] = diff[j,0] * c_fit
+        r[jj+1] = diff[j,1] * c_fit
         # E-rigid
-        r[jj+2] = A[j,0,0]*A[j,1,0] + A[j,0,1]*A[j,1,1]
-        r[jj+3] = 1 - A[j,0,0]*A[j,0,0] - A[j,0,1]*A[j,0,1]
-        r[jj+4] = 1 - A[j,1,0]*A[j,1,0] - A[j,1,1]*A[j,1,1]
+        r[jj+2] = (A[j,0,0]*A[j,1,0] + A[j,0,1]*A[j,1,1]) * c_rigid
+        r[jj+3] = (1 - A[j,0,0]*A[j,0,0] - A[j,0,1]*A[j,0,1]) * c_rigid
+        r[jj+4] = (1 - A[j,1,0]*A[j,1,0] - A[j,1,1]*A[j,1,1]) * c_rigid
+'''
         # E-smooth
         if (j==0):
-            d1 = np.dot((source[j+1]-source[j]),A[j]) + source[j] + b[j] - source[j+1] - b[j+1]
-            r[jj+5] = d1[0]
-            r[jj+6] = d1[1]
+            d = np.dot((source[j+1]-source[j]),A[j]) + source[j] + b[j] - source[j+1] - b[j+1]
+            r[jj+6] = d[0] * c_smooth
+            r[jj+8] = d[1] * c_smooth
         elif (j==(src_len-1)):
-            d1 = np.dot((source[j-1]-source[j]),A[j]) + source[j] + b[j] - source[j-1] - b[j-1]
-            r[jj+5] = d1[0]
-            r[jj+6] = d1[1]
+            d = np.dot((source[j-1]-source[j]),A[j]) + source[j] + b[j] - source[j-1] - b[j-1]
+            r[jj+5] = d[0] * c_smooth
+            r[jj+7] = d[1] * c_smooth
         else:
-            d1 = np.dot((source[j-1]-source[j]),A[j]) + source[j] + b[j] - source[j-1] - b[j-1]
-            d2 = np.dot((source[j+1]-source[j]),A[j]) + source[j] + b[j] - source[j+1] - b[j+1]
-            r[jj+5] = d1[0] + d2[0]
-            r[jj+6] = d1[1] + d2[1]
+            d = np.dot((source[j-1]-source[j]),A[j]) + source[j] + b[j] - source[j-1] - b[j-1]
+            r[jj+5] = d[0] * c_smooth
+            r[jj+7] = d[1] * c_smooth
+            d = np.dot((source[j+1]-source[j]),A[j]) + source[j] + b[j] - source[j+1] - b[j+1]
+            r[jj+6] = d[0] * c_smooth
+            r[jj+8] = d[1] * c_smooth
+'''
 
 '''
 MAIN PROGRAMME START
