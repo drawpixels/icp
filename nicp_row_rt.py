@@ -72,11 +72,12 @@ def Match (source, target):
 Deform the source
 '''
 def Deform (dset, rot, tx, ty):
-    deform = np.zeros_like(dset)
-    R = np.array([[np.cos(rot),np.sin(rot)],[-np.sin(rot),np.cos(rot)]])
-    T = np.array([tx,ty])
-    deform = np.dot((dset-T),R)
-    return deform
+	deform = np.zeros_like(dset)
+	R = np.array([[np.cos(rot),np.sin(rot)],[-np.sin(rot),np.cos(rot)]])
+	T = np.array([tx,ty])
+	#deform = np.dot((dset-T),R)
+	deform = np.dot(dset,R) + T
+	return deform
 
 '''
 Displacement between source and target
@@ -91,15 +92,23 @@ Derivative of displacement function
 Not working yet
 '''
 def D_Disp (p, srcdata, tgtdata):
+	d_r = -1 * np.dot(srcdata, np.array([[-np.sin(p[0]),np.cos(p[0])],[-np.cos(p[0]),-np.sin(p[0])]]))
+	d_tx = np.array([-1,0])
+	d_ty = np.array([0,-1])
+	d_d = np.zeros([np.product(srcdata.shape),3])
+	d_d[:,0] = d_r.flatten()
+	d_d[:,1] = np.tile(d_tx.flatten(),srcdata.shape[0])
+	d_d[:,2] = np.tile(d_ty.flatten(),srcdata.shape[0])
+	'''
 	d_r = -1 * np.dot((srcdata-np.array([p[1],p[2]])), \
 			np.array([[-np.sin(p[0]),np.cos(p[0])],[-np.cos(p[0]),-np.sin(p[0])]]))
 	d_tx = np.array([np.cos(p[0]),np.sin(p[0])])
 	d_ty = np.array([-np.sin(p[0]),np.cos(p[0])])
 	d_d = np.zeros([np.product(srcdata.shape),3])
 	d_d[:,0] = d_r.flatten()
-	for i in range(srcdata.shape[0]):
-		d_d[i*2:i*2+2,1] = d_tx.flatten()
-		d_d[i*2:i*2+2,2] = d_ty.flatten()
+	d_d[:,1] = np.tile(d_tx.flatten(),srcdata.shape[0])
+	d_d[:,2] = np.tile(d_ty.flatten(),srcdata.shape[0])
+	'''
 	return d_d
 
 target = GenerateTarget(target_len)
@@ -110,20 +119,20 @@ p0 = np.array([r,tx,ty])
 
 pt.ion()
 while (True):
-    dd = Deform(source,p0[0],p0[1],p0[2])
-    nn = Match(dd,target)
-    p, success = optimize.leastsq(Disp,p0,(source,nn),D_Disp)
-    print p, success
-    p0 = p
-    pt.plot(target[:,0],target[:,1],'r.')
-    pt.plot(source[:,0],source[:,1],'bo')
-    pt.plot(dd[:,0],dd[:,1],'b.')
-    #pt.plot(ss[:,0],ss[:,1],'g^')
-    pt.plot(nn[:,0],nn[:,1],'ro')
-    pt.show()
-    cont = raw_input("Continue?")
-    if ((cont=="n")or(cont=="N")):
-        pt.close()
-        break
-    pt.close()
+	dd = Deform(source,p0[0],p0[1],p0[2])
+	nn = Match(dd,target)
+	l = optimize.leastsq(Disp,p0,(source,nn),D_Disp,full_output=1)
+	print l[0], (l[2]['fvec']*l[2]['fvec']).sum()
+	p0 = l[0]
+	pt.plot(target[:,0],target[:,1],'r.')
+	pt.plot(source[:,0],source[:,1],'bo')
+	pt.plot(dd[:,0],dd[:,1],'b.')
+	#pt.plot(ss[:,0],ss[:,1],'g^')
+	pt.plot(nn[:,0],nn[:,1],'ro')
+	pt.show()
+	cont = raw_input("Continue?")
+	if ((cont=="n")or(cont=="N")):
+		pt.close()
+		break
+	pt.close()
 
