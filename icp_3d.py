@@ -102,7 +102,7 @@ Iteration stops if change in error is less than 'tol' or more than specified num
 def ICP (source,target,tol,run):
     dim = source.shape[1]
     ss = source.copy()
-    err = 100000    # arbitrary large number to start
+    err = 100000000    # arbitrary large number to start
     for i in range(run):
         e = err
         nn = Match(ss,target)
@@ -148,7 +148,7 @@ def main():
             tgtPts = GetVertices(tgtPath)
             print ("Source mode has %d vertices" % srcPts.shape[0])
             print ("Target mode has %d vertices" % tgtPts.shape[0])
-            Trans = ICP(srcPts,tgtPts,0.1,50)
+            Trans = ICP(srcPts,tgtPts,0.10,50)
             t = ArrayToMMatrix (Trans)
             #print "t = ", t
             transform = om.MFnTransform(srcPath)
