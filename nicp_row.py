@@ -51,8 +51,8 @@ def GenerateSource (nSample, rot, tx, ty):
 	dset = np.array([x,np.sin(x)]).T
 	#-- Introduce deformatio
 	for i in range(1,nSample):
-		#dset[i,0] *= 0.2 + (i*4.0)/nSample
-		dset[i,1] *= 0.5 + float(i)/float(nSample)
+		#dset[i,0] *= (0.2 + float(i)/float(nSample))
+		dset[i,1] *= (0.5 + float(i)/float(nSample))
 	# Rotate & translate source dataset
 	R = np.array([[np.cos(rot),np.sin(rot)],[-np.sin(rot),np.cos(rot)]])
 	T = np.array([tx,ty])
@@ -109,7 +109,7 @@ def Initialise (source, target):
 '''
 Deform the source
 '''
-def Deform (source, P, w):
+def Deform (P, w, source):
 	deform = np.zeros_like(source)
 	src_len = source.shape[0]
 	#-- Local transformation
@@ -129,33 +129,31 @@ def Deform (source, P, w):
 Function to minimize 
 Combination of E-fit, E-rigid, E-smooth
 '''
-def MinFunc (P, w, srcdata, tgtdata, deformdata):
+def MinFunc (P, w, srcdata, edges, tgtdata):
 	src_len = srcdata.shape[0]
-
-	'''
-	?????? - THE FOLLOWING VALUES ARE DIFFERENT ??????
-	'''
-	d = Deform(srcdata,P,w)
-	print d-deformdata
-
-
+	edge_len = edges.shape[0]
 	#-- E-fit
-	e_fit = tgtdata - Deform(srcdata,P,w) #deformdata
-	#-- E-rigid & E-smooth
+	e_fit = tgtdata - Deform(P,w,srcdata)
+	#-- E-rigid
 	e_rigid = np.zeros(src_len*3)
-	e_smooth = np.zeros((src_len*2,2))
 	for i in range(src_len):
 		A = P[(i*6):(i*6+4)].reshape(2,2)
 		b = P[(i*6+4):(i*6+6)]
-		#-- E-rigid
 		e_rigid[i*3] = A[0,0]*A[1,0] + A[0,1]*A[1,1]
 		e_rigid[i*3+1] = 1 - A[0,0]*A[0,0] - A[0,1]*A[0,1]
 		e_rigid[i*3+2] = 1 - A[1,0]*A[1,0] - A[1,1]*A[1,1]
-		#-- E-smooth
-		if (i!=0):
-			e_smooth[i*2] = np.dot((srcdata[i-1]-source[i]),A) + source[i] + b - source[i-1] - P[(i*6-2):(i*6-1)]
-		if (i!=(src_len-1)):
-			e_smooth[i*2+1] = np.dot((srcdata[i+1]-source[i]),A) + source[i] + b - source[i+1] - P[(i*6+10):(i*6+11)]
+	#-- E-smooth
+	e_smooth = np.zeros([edge_len*2,2])
+	for i in range(edge_len):
+		p1 = edges[i,0]
+		p2 = edges[i,1]
+		A1 = P[(p1*6):(p1*6+4)].reshape(2,2)
+		b1 = P[(p1*6+4):(p1*6+6)]
+		A2 = P[(p2*6):(p2*6+4)].reshape(2,2)
+		b2 = P[(p2*6+4):(p2*6+6)]
+		e_smooth[i*2]   = np.dot((source[p2]-source[p1]),A1) + source[p1] + b1 - (source[p2] + b2)
+		e_smooth[i*2+1] = np.dot((source[p1]-source[p2]),A2) + source[p2] + b2 - (source[p1] + b1)
+	global c_fit, c_rigid, c_smooth
 	e_fit *= c_fit
 	e_rigid *= c_rigid
 	e_smooth *= c_smooth
@@ -165,30 +163,30 @@ def MinFunc (P, w, srcdata, tgtdata, deformdata):
 Differentiate of minimization function 
 Sequence of rows must follow the definition of minimization function
 Sequence of columns must follow the parameter list 
-
-WORK IN PROGRESS
 '''
-def D_MinFunc (P, w, srcdata, tgtdata, deformdata):
+def D_MinFunc (P, w, srcdata, edges, tgtdata):
 	src_len = srcdata.shape[0]
+	edges_len = edges.shape[0]
 	nParam = P.shape[0]
 	d_e_fit = np.zeros([src_len*2,nParam])
 	d_e_rigid = np.zeros([src_len*3,nParam])
-	d_e_smooth = np.zeros([src_len*2*2,nParam])
+	d_e_smooth = np.zeros([edges_len*2*2,nParam])
 	R = np.array([[np.cos(P[-3]),np.sin(P[-3])],[-np.sin(P[-3]),np.cos(P[-3])]])
 	d_R = np.array([[-np.sin(P[-3]),np.cos(P[-3])],[-np.cos(P[-3]),-np.sin(P[-3])]])
+	dd = Deform(P,w,srcdata)
 	for i in range(src_len):
 		A = P[(i*6):(i*6+4)].reshape(2,2)
 		#-- E-fit
 		for j in range(src_len):
 			if (w[j,i]!=0):
 				disp = source[i] - source[j]
-				d_e_fit[i*2:i*2+2,j*6]   = w[j,i] * np.dot(disp,np.array([R[0],[0,0]]))
-				d_e_fit[i*2:i*2+2,j*6+1] = w[j,i] * np.dot(disp,np.array([R[1],[0,0]]))
-				d_e_fit[i*2:i*2+2,j*6+2] = w[j,i] * np.dot(disp,np.array([[0,0],R[0]]))
-				d_e_fit[i*2:i*2+2,j*6+3] = w[j,i] * np.dot(disp,np.array([[0,0],R[1]]))
-				d_e_fit[i*2:i*2+2,j*6+4] = R[0]
-				d_e_fit[i*2:i*2+2,j*6+5] = R[1]
-		d_e_fit[i*2:i*2+2,-3] = np.dot(-deformdata[i],d_R)
+				d_e_fit[i*2:i*2+2,j*6]   = -w[j,i] * np.dot(disp,np.array([R[0],[0,0]]))
+				d_e_fit[i*2:i*2+2,j*6+1] = -w[j,i] * np.dot(disp,np.array([R[1],[0,0]]))
+				d_e_fit[i*2:i*2+2,j*6+2] = -w[j,i] * np.dot(disp,np.array([[0,0],R[0]]))
+				d_e_fit[i*2:i*2+2,j*6+3] = -w[j,i] * np.dot(disp,np.array([[0,0],R[1]]))
+				d_e_fit[i*2:i*2+2,j*6+4] = -R[0]
+				d_e_fit[i*2:i*2+2,j*6+5] = -R[1]
+		d_e_fit[i*2:i*2+2,-3] = np.dot(-dd[i],d_R)
 		d_e_fit[i*2:i*2+2,-2] = np.array([-1,0])
 		d_e_fit[i*2:i*2+2,-1] = np.array([0,-1])
 		#-- E-rigid
@@ -204,27 +202,28 @@ def D_MinFunc (P, w, srcdata, tgtdata, deformdata):
 		d_e_rigid[i*3,  i*6+3] = A[0,1]
 		d_e_rigid[i*3+1,i*6+3] = 0
 		d_e_rigid[i*3+2,i*6+3] = -2*A[1,1]		
-		#-- E-smooth
-		if (i!=0):
-			disp = source[i-1] - source[i]
-			d_e_smooth[i*4:i*4+2,i*6]   = np.array([disp[0],0])
-			d_e_smooth[i*4:i*4+2,i*6+1] = np.array([0,disp[0]])
-			d_e_smooth[i*4:i*4+2,i*6+2] = np.array([disp[1],0])
-			d_e_smooth[i*4:i*4+2,i*6+3] = np.array([0,disp[1]])
-			d_e_smooth[i*4:i*4+2,i*6+4] = np.array([1,0])
-			d_e_smooth[i*4:i*4+2,i*6+5] = np.array([0,1])
-			d_e_smooth[i*4:i*4+2,i*6-2] = np.array([1,0])
-			d_e_smooth[i*4:i*4+2,i*6-1] = np.array([0,1])
-		if (i!=(src_len-1)):
-			disp = source[i+1] - source[i]
-			d_e_smooth[i*4+2:i*4+4,i*6]   = np.array([disp[0],0])
-			d_e_smooth[i*4+2:i*4+4,i*6+1] = np.array([0,disp[0]])
-			d_e_smooth[i*4+2:i*4+4,i*6+2] = np.array([disp[1],0])
-			d_e_smooth[i*4+2:i*4+4,i*6+3] = np.array([0,disp[1]])
-			d_e_smooth[i*4+2:i*4+4,i*6+4] = np.array([1,0])
-			d_e_smooth[i*4+2:i*4+4,i*6+5] = np.array([0,1])
-			d_e_smooth[i*4+2:i*4+4,i*6+10] = np.array([1,0])
-			d_e_smooth[i*4+2:i*4+4,i*6+11] = np.array([0,1])
+	#-- E-smooth
+	for i in range(edges_len):
+		p1 = edges[i,0]
+		p2 = edges[i,1]
+		disp = source[p2] - source[p1]
+		d_e_smooth[i*4:i*4+2,p1*6]   = np.array([disp[0],0])
+		d_e_smooth[i*4:i*4+2,p1*6+1] = np.array([0,disp[0]])
+		d_e_smooth[i*4:i*4+2,p1*6+2] = np.array([disp[1],0])
+		d_e_smooth[i*4:i*4+2,p1*6+3] = np.array([0,disp[1]])
+		d_e_smooth[i*4:i*4+2,p1*6+4] = np.array([1,0])
+		d_e_smooth[i*4:i*4+2,p1*6+5] = np.array([0,1])
+		d_e_smooth[i*4:i*4+2,p2*6+4] = np.array([-1,0])
+		d_e_smooth[i*4:i*4+2,p2*6+5] = np.array([0,-1])
+		d_e_smooth[i*4+2:i*4+4,p2*6]   = np.array([-disp[0],0])
+		d_e_smooth[i*4+2:i*4+4,p2*6+1] = np.array([0,-disp[0]])
+		d_e_smooth[i*4+2:i*4+4,p2*6+2] = np.array([-disp[1],0])
+		d_e_smooth[i*4+2:i*4+4,p2*6+3] = np.array([0,-disp[1]])
+		d_e_smooth[i*4+2:i*4+4,p2*6+4] = np.array([1,0])
+		d_e_smooth[i*4+2:i*4+4,p2*6+5] = np.array([0,1])
+		d_e_smooth[i*4+2:i*4+4,p1*6+4] = np.array([-1,0])
+		d_e_smooth[i*4+2:i*4+4,p1*6+5] = np.array([0,-1])
+	global c_fit, c_rigid, c_smooth
 	d_e_fit *= c_fit
 	d_e_rigid *= c_rigid
 	d_e_smooth *= c_smooth
@@ -235,20 +234,22 @@ MAIN PROGRAMME START
 '''
 target = GenerateTarget(target_len)
 source = GenerateSource(source_len,rotate,translate_x,translate_y)
+edges = np.array([[i,i+1] for i in range(source_len-1)])
 #ICP(source,target,0.1,20)
 P0, w = Initialise(source,target)
 print "Initialized"
 
 pt.ion()
 while (True):
-	dd = Deform(source,P0,w)
+	dd = Deform(P0,w,source)
 	nn = Match(dd,target)
-	lsq = optimize.leastsq(MinFunc,P0,(w,source,nn,dd),D_MinFunc,full_output=1)
+	lsq = optimize.leastsq(MinFunc,P0,(w,source,edges,nn),D_MinFunc,full_output=1)
+	#lsq = optimize.leastsq(MinFunc,P0,(w,source,edges,nn),full_output=1)
 	print lsq[0], (lsq[2]['fvec']*lsq[2]['fvec']).sum()
 	P0 = lsq[0]
 	# plot
-	#pt.xlim(-2,8)
-	#pt.ylim(-2,15)
+	pt.xlim(-1,8)
+	pt.ylim(-2,9)
 	pt.plot(target[:,0],target[:,1],'r.')
 	pt.plot(source[:,0],source[:,1],'g^')
 	pt.plot(dd[:,0],dd[:,1],'b.')
