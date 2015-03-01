@@ -16,8 +16,8 @@ Global Parameters
 '''
 num_nn = 4
 c_fit = 0.1
-c_rigid = 1000
-c_smooth = 100
+c_rigid = 1000.0
+c_smooth = 100.0
 
 '''
 Return the selected models - must select TWO models SRC & TGT
@@ -149,11 +149,6 @@ Initialise
 def Initialise (source, target):
 	src_len = source.shape[0]
 	tgt_len = target.shape[0]
-	#-- Initialize weight 
-	global c_fit,c_rigid,c_smooth
-	c_fit = 0.1
-	c_rigid = 1000
-	c_smooth = 100
 	#-- Initialize parameters: A = identity, b = zero, Rxyz = 0, Txyz = 0
 	A = np.identity(3)
 	b = np.zeros(3)
@@ -232,13 +227,6 @@ def Deform (P, w, source):
 	#return deform
 	#-- Global transformation
 	R = RotMatrix(P[-6],P[-5],P[-4])
-	#theta = P[-6]
-	#rx = np.array([[1,0,0],[0,np.cos(theta),np.sin(theta)],[0,-np.sin(theta),np.cos(theta)]])
-	#theta = P[-5]
-	#ry = np.array([[np.cos(theta),0,-np.sin(theta)],[0,1,0],[np.sin(theta),0,np.cos(theta)]])
-	#theta = P[-4]
-	#rz = np.array([[np.cos(theta),np.sin(theta),0],[-np.sin(theta),np.cos(theta),0],[0,0,1]])
-	#R = np.dot(np.dot(rx,ry),rz)
 	T = np.array([P[-3],P[-2],P[-1]])
 	return np.dot(deform,R) + T
 
@@ -289,39 +277,39 @@ def D_MinFunc (P, w, srcdata, edges, tgtdata):
 	d_e_rigid = np.zeros([src_len*6,nParam])
 	d_e_smooth = np.zeros([edges_len*2*3,nParam])
 	R = RotMatrix(P[-6],P[-5],P[-4])
-	d_Rx,d_Ry,d_Rz = D_RotMatrix(P[-6],P[-5],P[-4])
+	d_Rx, d_Ry, d_Rz = D_RotMatrix(P[-6],P[-5],P[-4])
 	dd = Deform(P,w,srcdata)
 	for i in range(src_len):
 		#-- E-fit
 		for j in range(src_len):
 			if (w[j,i]!=0):
 				disp = srcdata[i] - srcdata[j]
-				d_e_fit[i*2:i*2+3,j*12]    = -w[j,i] * np.dot(disp,np.array([R[0],[0,0,0],[0,0,0]]))
-				d_e_fit[i*2:i*2+3,j*12+1]  = -w[j,i] * np.dot(disp,np.array([R[1],[0,0,0],[0,0,0]]))
-				d_e_fit[i*2:i*2+3,j*12+2]  = -w[j,i] * np.dot(disp,np.array([R[2],[0,0,0],[0,0,0]]))
-				d_e_fit[i*2:i*2+3,j*12+3]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],R[0],[0,0,0]]))
-				d_e_fit[i*2:i*2+3,j*12+4]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],R[1],[0,0,0]]))
-				d_e_fit[i*2:i*2+3,j*12+5]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],R[2],[0,0,0]]))
-				d_e_fit[i*2:i*2+3,j*12+6]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],[0,0,0],R[0]]))
-				d_e_fit[i*2:i*2+3,j*12+7]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],[0,0,0],R[1]]))
-				d_e_fit[i*2:i*2+3,j*12+8]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],[0,0,0],R[2]]))
-				d_e_fit[i*2:i*2+3,j*12+9]  = -R[0]
-				d_e_fit[i*2:i*2+3,j*12+10] = -R[1]
-				d_e_fit[i*2:i*2+3,j*12+11] = -R[2]
-		d_e_fit[i*2:i*2+3,-6] = np.dot(-dd[i],d_Rx)
-		d_e_fit[i*2:i*2+3,-5] = np.dot(-dd[i],d_Ry)
-		d_e_fit[i*2:i*2+3,-4] = np.dot(-dd[i],d_Rz)
-		d_e_fit[i*2:i*2+3,-3] = np.array([-1,0,0])
-		d_e_fit[i*2:i*2+3,-2] = np.array([0,-1,0])
-		d_e_fit[i*2:i*2+3,-1] = np.array([0,0,-1])
+				d_e_fit[i*3:i*3+3,j*12]    = -w[j,i] * np.dot(disp,np.array([R[0],[0,0,0],[0,0,0]]))
+				d_e_fit[i*3:i*3+3,j*12+1]  = -w[j,i] * np.dot(disp,np.array([R[1],[0,0,0],[0,0,0]]))
+				d_e_fit[i*3:i*3+3,j*12+2]  = -w[j,i] * np.dot(disp,np.array([R[2],[0,0,0],[0,0,0]]))
+				d_e_fit[i*3:i*3+3,j*12+3]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],R[0],[0,0,0]]))
+				d_e_fit[i*3:i*3+3,j*12+4]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],R[1],[0,0,0]]))
+				d_e_fit[i*3:i*3+3,j*12+5]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],R[2],[0,0,0]]))
+				d_e_fit[i*3:i*3+3,j*12+6]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],[0,0,0],R[0]]))
+				d_e_fit[i*3:i*3+3,j*12+7]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],[0,0,0],R[1]]))
+				d_e_fit[i*3:i*3+3,j*12+8]  = -w[j,i] * np.dot(disp,np.array([[0,0,0],[0,0,0],R[2]]))
+				d_e_fit[i*3:i*3+3,j*12+9]  = -w[j,i] * R[0]
+				d_e_fit[i*3:i*3+3,j*12+10] = -w[j,i] * R[1]
+				d_e_fit[i*3:i*3+3,j*12+11] = -w[j,i] * R[2]
+		d_e_fit[i*3:i*3+3,-6] = np.dot(-dd[i],d_Rx)
+		d_e_fit[i*3:i*3+3,-5] = np.dot(-dd[i],d_Ry)
+		d_e_fit[i*3:i*3+3,-4] = np.dot(-dd[i],d_Rz)
+		d_e_fit[i*3:i*3+3,-3] = np.array([-1,0,0])
+		d_e_fit[i*3:i*3+3,-2] = np.array([0,-1,0])
+		d_e_fit[i*3:i*3+3,-1] = np.array([0,0,-1])
 		#-- E-rigid
 		A,b = PtoAB(P,i)
-		d_e_rigid[i*3,  i*12:i*12+9] = np.array([A[1,0],A[1,1],A[1,2], A[0,0],A[0,1],A[0,2], 0,0,0])
-		d_e_rigid[i*3+1,i*12:i*12+9] = np.array([0,0,0, A[2,0],A[2,1],A[2,2], A[1,0],A[1,1],A[1,2]])
-		d_e_rigid[i*3+2,i*12:i*12+9] = np.array([A[2,0],A[2,1],A[2,2], 0,0,0, A[0,0],A[0,1],A[0,2]])
-		d_e_rigid[i*3+3,i*12:i*12+9] = np.array([-2*A[0,0],-2*A[0,1],-2*A[0,2], 0,0,0, 0,0,0])
-		d_e_rigid[i*3+4,i*12:i*12+9] = np.array([0,0,0, -2*A[1,0],-2*A[1,1],-2*A[1,2], 0,0,0])
-		d_e_rigid[i*3+5,i*12:i*12+9] = np.array([0,0,0, 0,0,0, -2*A[2,0],-2*A[2,1],-2*A[2,2]])
+		d_e_rigid[i*6,  i*12:i*12+9] = np.array([A[1,0],A[1,1],A[1,2], A[0,0],A[0,1],A[0,2], 0,0,0])
+		d_e_rigid[i*6+1,i*12:i*12+9] = np.array([0,0,0, A[2,0],A[2,1],A[2,2], A[1,0],A[1,1],A[1,2]])
+		d_e_rigid[i*6+2,i*12:i*12+9] = np.array([A[2,0],A[2,1],A[2,2], 0,0,0, A[0,0],A[0,1],A[0,2]])
+		d_e_rigid[i*6+3,i*12:i*12+9] = np.array([-2*A[0,0],-2*A[0,1],-2*A[0,2], 0,0,0, 0,0,0])
+		d_e_rigid[i*6+4,i*12:i*12+9] = np.array([0,0,0, -2*A[1,0],-2*A[1,1],-2*A[1,2], 0,0,0])
+		d_e_rigid[i*6+5,i*12:i*12+9] = np.array([0,0,0, 0,0,0, -2*A[2,0],-2*A[2,1],-2*A[2,2]])
 	#-- E-smooth
 	for i in range(edges_len):
 		p1 = edges[i,0]
@@ -341,7 +329,6 @@ def D_MinFunc (P, w, srcdata, edges, tgtdata):
 		d_e_smooth[i*6+3,p1*12+9:p1*12+12] = np.array([-1,0,0])
 		d_e_smooth[i*6+4,p1*12+9:p1*12+12] = np.array([0,-1,0])
 		d_e_smooth[i*6+5,p1*12+9:p1*12+12] = np.array([0,0,-1])
-
 	global c_fit, c_rigid, c_smooth
 	d_e_fit *= c_fit
 	d_e_rigid *= c_rigid
@@ -353,6 +340,7 @@ Return the transformation matrix which align the source to target
 Iteration stops if change in error is less than 'tol' or more than specified number of runs
 '''
 def NICP (P, w, source, edges, target, tol, run):
+	global c_fit, c_rigid, c_smooth
 	err = 100000000    # arbitrary large number to start
 	for i in range(run):
 		e = err
@@ -361,9 +349,12 @@ def NICP (P, w, source, edges, target, tol, run):
 		lsq = optimize.leastsq(MinFunc,P,(w,source,edges,nn),D_MinFunc,full_output=1)
 		P = lsq[0]
 		err = (lsq[2]['fvec']*lsq[2]['fvec']).sum()
-		print "error = {0:f} {1:2d}".format(err,i)
+		print "{0:2d} error = {1:f} [{2:f},{3:f}]".format(i,err,c_rigid,c_smooth)
 		if ((e-err)<tol):
-			break
+			c_rigid /= 2.0
+			c_smooth /= 2.0
+			if ((c_rigid<0.1) or (c_smooth<0.1)):
+				break
 	#-- Apply the final deformation parameters
 	dd = Deform(P,w,source)
 	print P
@@ -410,7 +401,7 @@ def main():
 			print ("Source mode has {0:d} vertices, {1:d} edges".format(srcPts.shape[0],srcEdges.shape[0]))
 			print ("Target mode has {0:d} vertices, {1:d} edges".format(tgtPts.shape[0],tgtEdges.shape[0]))
 			P0,w = Initialise(srcPts,tgtPts)
-			newPts, P = NICP(P0,w,srcPts,srcEdges,tgtPts,1,3)
+			newPts, P = NICP(P0,w,srcPts,srcEdges,tgtPts,0.01,50)
 			ModifyVertices(srcPath,newPts)
 			
 # ---- Template code for Maya Plugin Command ---- #
