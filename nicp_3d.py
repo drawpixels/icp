@@ -73,6 +73,7 @@ def Match (source, target):
 	for i in range(source.shape[0]):
 		c = Closest(target,source[i])
 		nn[i] = target[c]
+		print nn[i]
 	return nn
 
 '''
@@ -161,6 +162,7 @@ def Initialise (source, target):
 		denom = num_nn - dist[1:-1].sum()/dist[-1]
 		for i in range(1,num_nn+1):
 			w[idx[i],j] = (1 - dist[i]/dist[-1]) / denom
+	#print w[0:10,0:10]
 	return (P,w)
 
 '''
@@ -401,8 +403,9 @@ def main():
 			print ("Source mode has {0:d} vertices, {1:d} edges".format(srcPts.shape[0],srcEdges.shape[0]))
 			print ("Target mode has {0:d} vertices, {1:d} edges".format(tgtPts.shape[0],tgtEdges.shape[0]))
 			P0,w = Initialise(srcPts,tgtPts)
-			newPts, P = NICP(P0,w,srcPts,srcEdges,tgtPts,0.01,50)
-			ModifyVertices(srcPath,newPts)
+			nn = Match(srcPts,tgtPts)
+			#newPts, P = NICP(P0,w,srcPts,srcEdges,tgtPts,0.01,50)
+			#ModifyVertices(srcPath,newPts)
 			
 # ---- Template code for Maya Plugin Command ---- #
 
