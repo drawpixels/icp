@@ -33,13 +33,14 @@ endif
 
 SRCDIR := .
 DSTDIR := .
-PKGDIR := $(HOME)/Documents/Packages
+#PKGDIR := $(HOME)/Documents/Packages
+PKGDIR := .
 
 nicp3d_SOURCES  := nicp3d.cpp
 nicp3d_OBJECTS  := nicp3d.o
 nicp3d_PLUGIN   := $(DSTDIR)/nicp3d.$(EXT)
 nicp3d_MAKEFILE := $(DSTDIR)/Makefile
-nicp3d_EXTRA_INCLUDES := -I"$(PKGDIR)/tnt_126_2"
+nicp3d_EXTRA_INCLUDES := -I"$(PKGDIR)/tnt_126"
 
 #
 # Include the optional per-plugin Makefile.inc

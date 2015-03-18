@@ -43,7 +43,7 @@ private:
 	void GetVerticesEdges (MDagPath dag, TNT::Array2D<double>& vert, TNT::Array2D<int>& edg);
 	void Initialise (TNT::Array2D<double> vert);
 	void Match (TNT::Array2D<double> source, TNT::Array2D<double> target, TNT::Array2D<double>& matchset);
-	void Deform (TNT::Array2D<double> dataset, TNT::Array2D<double> deformset);
+	void Deform (TNT::Array2D<double> dataset, TNT::Array2D<double>& deformset);
 	void PtoAB (int i, TNT::Array2D<double>& A, TNT::Array1D<double>& b);
 	void RotMatrix (double x, double y, double z, TNT::Array2D<double>& rot);
 	void D_RotMatrix (double x, double y, double z, TNT::Array2D<double>& drotx, TNT::Array2D<double>& droty, TNT::Array2D<double>& drotz);
@@ -87,8 +87,9 @@ MStatus nicp3d::doIt(const MArgList& argList) {
 	Initialise(ptsSrc);
 	TNT::Array2D<double> ptsNN;
 	Match(ptsSrc,ptsTgt,ptsNN);
-	TNT::Array2D<double> ptsDD (ptsSrc.dim1(),3);
+	TNT::Array2D<double> ptsDD;
 	Deform(ptsSrc,ptsDD);
+	ModifyVertices(dagSrc,ptsDD);
 	return MS::kSuccess;
 }
 
@@ -189,9 +190,8 @@ void nicp3d::Initialise (TNT::Array2D<double> vert) {
 		params[ii+4] = 1.0;
 		params[ii+8] = 1.0;
 	}
-	//int nParams = params.dim1();
-	//params[nParams-1] = 1.0;
-	//params[nParams-2] = 2.0;
+	int nParams = params.dim1();
+	params[nParams-1] = 2.0;
 	//-- Calculate weights
 	int idxKnn[NUM_NN+2];
 	double distKnn[NUM_NN+2];
@@ -274,63 +274,17 @@ void nicp3d::Match (TNT::Array2D<double> source, TNT::Array2D<double> target, TN
 //
 // Deform the mesh using parameters
 //
-void nicp3d::Deform (TNT::Array2D<double> dataset, TNT::Array2D<double> deformset) {
+void nicp3d::Deform (TNT::Array2D<double> dataset, TNT::Array2D<double>& deformset) {
 	char sInfo[5000];
 
-	//-- Get global transformation matrices
-	int nParam = params.dim1();
-	TNT::Array2D<double> Rot;
-	RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4],Rot);
-	TNT::Array1D<double> Txn(3,params.data()+nParam-3);
-	/* DEBUG PRRINT *
-	sprintf(sInfo,"a:R=(%f,%f,%f %f,%f,%f %f,%f,%f) T=(%f,%f,%f)",
-		Rot[0][0],Rot[0][1],Rot[0][2],
-		Rot[1][0],Rot[1][1],Rot[1][2],
-		Rot[2][0],Rot[2][1],Rot[2][2],
-		Txn[0],Txn[1],Txn[2]);
-	MGlobal::displayInfo(sInfo);
-	* DEBUG PRINT */
-
-	/* DEBUG PRRINT *
-	sprintf(sInfo,"b:R=(%f,%f,%f %f,%f,%f %f,%f,%f) T=(%f,%f,%f)",
-		Rot[0][0],Rot[0][1],Rot[0][2],
-		Rot[1][0],Rot[1][1],Rot[1][2],
-		Rot[2][0],Rot[2][1],Rot[2][2],
-		Txn[0],Txn[1],Txn[2]);
-	MGlobal::displayInfo(sInfo);
-	* DEBUG PRINT */
-
 	int nLen = dataset.dim1();
-
-	/* DEBUG PRRINT *
-	sprintf(sInfo,"R=(%f,%f,%f %f,%f,%f %f,%f,%f) T=(%f,%f,%f)",
-		Rot[0][0],Rot[0][1],Rot[0][2],
-		Rot[1][0],Rot[1][1],Rot[1][2],
-		Rot[2][0],Rot[2][1],Rot[2][2],
-		Txn[0],Txn[1],Txn[2]);
-	MGlobal::displayInfo(sInfo);
-	* DEBUG PRINT */
+	deformset = TNT::Array2D<double> (nLen,3);
 
 	TNT::Array2D<double> A;
 	TNT::Array1D<double> b;
 	TNT::Array1D<double> tmp;
-	/* DEBUG PRRINT *
-	sprintf(sInfo,"R=(%f,%f,%f %f,%f,%f %f,%f,%f) T=(%f,%f,%f)",
-		Rot[0][0],Rot[0][1],Rot[0][2],
-		Rot[1][0],Rot[1][1],Rot[1][2],
-		Rot[2][0],Rot[2][1],Rot[2][2],
-		Txn[0],Txn[1],Txn[2]);
-	MGlobal::displayInfo(sInfo);
-	* DEBUG PRINT */
+
 	for (int i=0; i<nLen; i++) {
-		/* DEBUG PRRINT */
-		sprintf(sInfo,"%2d R=(%f,%f,%f %f,%f,%f %f,%f,%f) T=(%f,%f,%f)",i,
-			Rot[0][0],Rot[0][1],Rot[0][2],
-			Rot[1][0],Rot[1][1],Rot[1][2],
-			Rot[2][0],Rot[2][1],Rot[2][2],
-			Txn[0],Txn[1],Txn[2]);
-		MGlobal::displayInfo(sInfo);
-		/* DEBUG PRINT */
 		deformset[i][0] = deformset[i][1] = deformset[i][2] = 0.0;
 		for (int j=0; j<nLen; j++) {
 			if (weights[j][i]!=0) {
@@ -342,15 +296,6 @@ void nicp3d::Deform (TNT::Array2D<double> dataset, TNT::Array2D<double> deformse
 					A[2][0],A[2][1],A[2][2],
 					b[0],b[1],b[2]);
 				MGlobal::displayInfo(sInfo);
-				* DEBUG PRINT */
-				/* DEBUG PRINT *
-				if ((A[0][0]!=1.0)||(A[0][1]!=0.0)||(A[0][2]!=0.0)||
-					(A[1][0]!=0.0)||(A[1][1]!=1.0)||(A[1][2]!=0.0)||
-					(A[2][0]!=0.0)||(A[2][1]!=0.0)||(A[2][2]!=1.0)||
-					(b[0]!=0.0)||(b[1]!=0.0)||(b[2]!=0.0)) {
-						sprintf(sInfo,"Wrong A,B at %d",j);
-						MGlobal::displayInfo(sInfo);
-				}
 				* DEBUG PRINT */
 				/* DEBUG PRINT *
 				if (i<5) {
@@ -390,7 +335,7 @@ void nicp3d::Deform (TNT::Array2D<double> dataset, TNT::Array2D<double> deformse
 					deformset[i][0] += tmp[0];
 					deformset[i][1] += tmp[1];
 					deformset[i][2] += tmp[2];
-					//}
+				//}
 			}
 		}
 		/* DEBUG PRINT *
@@ -398,36 +343,39 @@ void nicp3d::Deform (TNT::Array2D<double> dataset, TNT::Array2D<double> deformse
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
 	}	
+	//-- Global transformation
+	int nParam = params.dim1();
+	TNT::Array2D<double> Rot;
+	RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4],Rot);
+	TNT::Array1D<double> Txn = params.subarray(nParam-3,nParam-1);
+
+	//--
+	//-- Printing content of Rot will reset it to Zero. ????????
+	//--
 	/* DEBUG PRRINT *
 	sprintf(sInfo,"R=(%f,%f,%f %f,%f,%f %f,%f,%f) T=(%f,%f,%f)",
-		Rot[0][0],Rot[0][1],Rot[0][2],
-		Rot[1][0],Rot[1][1],Rot[1][2],
-		Rot[2][0],Rot[2][1],Rot[2][2],
+		Rot[0][0],Rot[0][1],Rot[0][2], Rot[1][0],Rot[1][1],Rot[1][2], Rot[2][0],Rot[2][1],Rot[2][2],
 		Txn[0],Txn[1],Txn[2]);
 	MGlobal::displayInfo(sInfo);
 	* DEBUG PRINT */
 	
-	//-- Global transformation
-	deformset = TNT::matmult(deformset,Rot,sInfo);
-	MGlobal::displayInfo(sInfo);
-	//deformset = TNT::addrow(deformset,Txn);
+	deformset = TNT::matmult(deformset,Rot);
+	deformset = TNT::addrow(deformset,Txn);
 	//deformset = TNT::addrow(TNT::matmult(deformset,Rot),Txn);
-	/* DEBUG PRINT */
+	/* DEBUG PRINT *
 	for (int i=0; i<nLen; i++) {
 		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,dataset[i][0],dataset[i][1],dataset[i][2],deformset[i][0],deformset[i][1],deformset[i][2]);
 		MGlobal::displayInfo(sInfo);
 	}
-	/* DEBUG PRINT */
+	* DEBUG PRINT */
 }
 
 //
 // Extract A & b from P for a vertex
 //
 void nicp3d::PtoAB (int i, TNT::Array2D<double>& A, TNT::Array1D<double>& b) {
-	//A = TNT::Array2D<double> (3,3,params[i*12]);
-	//b = TNT::Array1D<double> (3,params[i*12+9]);
-	A = TNT::Array2D<double> (3,3,params.data()+i*12);
-	b = TNT::Array1D<double> (3,params.data()+i*12+9);
+	A = TNT::Array2D<double> (3,3,params.subarray(i*12,i*12+8));
+	b = params.subarray(i*12+9,i*12+11);
 }
 
 //
@@ -440,12 +388,10 @@ void nicp3d::RotMatrix (double x, double y, double z, TNT::Array2D<double>& rot)
 	double cy = cos(y);
 	double sz = sin(z);
 	double cz = cos(z);
-	double rot_elem[] = {
-		cy*cz, cy*sz, -sy, 
-		sx*sy*cz-cx*sz, sx*sy*sz+cx*cz, sx*cy,
-		cx*sy*cz+sx*sz, cx*sy*sz-sx*cz, cx*cy 
-	};
-	rot = TNT::Array2D<double>(3,3,rot_elem);
+	rot = TNT::Array2D<double> (3,3);
+	rot[0][0] = cy*cz; rot[0][1] = cy*sz; rot[0][2] = -sy; 
+	rot[1][0] = sx*sy*cz-cx*sz; rot[1][1] = sx*sy*sz+cx*cz; rot[1][2] = sx*cy;
+	rot[2][0] = cx*sy*cz+sx*sz; rot[2][1] = cx*sy*sz-sx*cz; rot[2][2] = cx*cy; 
 }
 
 //
@@ -458,24 +404,30 @@ void nicp3d::D_RotMatrix (double x, double y, double z, TNT::Array2D<double>& dr
 	double cy = cos(y);
 	double sz = sin(z);
 	double cz = cos(z);
-	double drotx_elem[] = {
-		0, 0, 0, 
-		cx*sy*cz+sx*sz, cx*sy*sz-sx*cz, cx*cy, 
-		-sx*sy*cz+cx*sz, -sx*sy*sz-cx*cz, -sx*cy
-	};
-	drotx = TNT::Array2D<double>(3,3,drotx_elem);
-	double droty_elem[] = {
-		-sy*cz, -sy*sz, -cy, 
-		sx*cy*cz, sx*cy*sz, -sx*sy, 
-		cx*cy*cz, cx*cy*sz, -cx*sy
-	};
-	droty = TNT::Array2D<double>(3,3,droty_elem);
-	double drotz_elem[] = {
-		-cy*sz, cy*cz, 0, 
-		-sx*sy*sz-cx*cz, sx*sy*cz-cx*sz, 0, 
-		-cx*sy*sz+sx*cz, cx*sy*cz+sx*sz, 0
-	};
-	drotz = TNT::Array2D<double>(3,3,drotz_elem);
+
+	drotx = TNT::Array2D<double> (3,3);
+	drotx[0][0] = 0; drotx[0][1] = 0; drotx[0][2] = 0; 
+	drotx[1][0] = cx*sy*cz+sx*sz; drotx[1][1] = cx*sy*sz-sx*cz; drotx[1][2] = cx*cy; 
+	drotx[2][0] = -sx*sy*cz+cx*sz; drotx[2][1] = -sx*sy*sz-cx*cz; drotx[2][2] = -sx*cy;
+
+	droty = TNT::Array2D<double> (3,3);
+	droty[0][0] = -sy*cz; droty[0][1] = -sy*sz; droty[0][2] = -cy; 
+	droty[1][0] = sx*cy*cz; droty[1][1] = sx*cy*sz; droty[1][2] = -sx*sy; 
+	droty[2][0] = cx*cy*cz; droty[2][1] = cx*cy*sz; droty[2][2] = -cx*sy;
+
+	drotz = TNT::Array2D<double> (3,3);
+	drotz[0][0] = -cy*sz; drotz[0][1] = cy*cz; drotz[0][2] = 0; 
+	drotz[1][0] = -sx*sy*sz-cx*cz; drotz[1][1] = sx*sy*cz-cx*sz; drotz[1][2] = 0; 
+	drotz[2][0] = -cx*sy*sz+sx*cz; drotz[2][1] = cx*sy*cz+sx*sz; drotz[2][2] = 0;
+}
+
+void nicp3d::ModifyVertices (MDagPath path, TNT::Array2D<double> dataset) {
+	int nLen = dataset.dim1();
+	MPointArray pts(nLen);
+	for (int i=0; i<nLen; i++)
+		pts.set(i,dataset[i][0],dataset[i][1],dataset[i][2]);
+	MFnMesh mesh(path);
+	mesh.setPoints(pts,MSpace::kWorld);
 }
 
 
