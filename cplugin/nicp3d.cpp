@@ -7,10 +7,8 @@
 #include <cmath>
 #include <queue>
 #include <vector>
-#include <tnt_array1d.h>
-#include <tnt_array1d_utils.h>
-#include <tnt_array2d.h>
-#include <tnt_array2d_utils.h>
+#include <iostream>
+#include <Eigen/Core>
 #include <maya/MGlobal.h>
 #include <maya/MTypes.h>
 #include <maya/MFnPlugin.h> 
@@ -28,6 +26,7 @@
 #define INIT_C_SMOOTH 100.0
 
 using namespace std;
+using namespace Eigen;
 
 class nicp3d : public MPxCommand {
 public:
@@ -35,28 +34,27 @@ public:
 	virtual MStatus doIt(const MArgList& argList);
 	static void* creator();
 private:
-	TNT::Array1D<double> params;
-	TNT::Array2D<double> weights;
-	int KNN (TNT::Array2D<double> dataset, double* pt, int k, int* idx, double* dist);
-	int Closest (TNT::Array2D<double> dataset, double* pt, double* minDist=NULL);
+	VectorXd params;
+	MatrixXd weights;
 	int GetModels (MDagPath& dag1, MDagPath& dag2);
-	void GetVerticesEdges (MDagPath dag, TNT::Array2D<double>& vert, TNT::Array2D<int>& edg);
-	void Initialise (TNT::Array2D<double> vert);
-	void Match (TNT::Array2D<double> source, TNT::Array2D<double> target, TNT::Array2D<double>& matchset);
-	void Deform (TNT::Array2D<double> dataset, TNT::Array2D<double>& deformset);
-	void PtoAB (int i, TNT::Array2D<double>& A, TNT::Array1D<double>& b);
-	void RotMatrix (double x, double y, double z, TNT::Array2D<double>& rot);
-	void D_RotMatrix (double x, double y, double z, TNT::Array2D<double>& drotx, TNT::Array2D<double>& droty, TNT::Array2D<double>& drotz);
-	void ModifyVertices (MDagPath path, TNT::Array2D<double> dataset);
+	void GetVerticesEdges (MDagPath dag, MatrixX3d& vert, MatrixX2i& edg);
+	void Initialise (const MatrixX3d vert);
+	void Match (const MatrixX3d& source, const MatrixX3d& target, MatrixX3d& matchset);
+	int KNN (const MatrixX3d& dataset, const RowVector3d& pt, int k, int* idx, double* dist);
+	int Closest (const MatrixX3d& dataset, const RowVector3d& pt, double* minDist=NULL);
+	void Deform (const MatrixX3d& dataset, MatrixX3d& deformset);
+	void PtoAB (int i, Matrix3d& A, RowVector3d& b);
+	void RotMatrix (double x, double y, double z, Matrix3d& rot);
+	void ModifyVertices (MDagPath path, const RowVector3d& dataset);
 };
 
 //
 // Return the Euclidean distance between 2 points
 //
-double Distance (double* p1, double* p2) {
+double Distance (const RowVector3d& p1, const RowVector3d& p2) {
 	double disp, sumDispSq = 0.0;
 	for (int i=0; i<3; i++) {
-		disp = p1[i] - p2[i];
+		disp = p1(i) - p2(i);
 		sumDispSq += disp * disp;
 	}
 	return sqrt(sumDispSq);	
@@ -76,28 +74,117 @@ MStatus nicp3d::doIt(const MArgList& argList) {
 		MGlobal::displayInfo("Selected models must be mesh");
 		return MS::kFailure;
 	}
-	TNT::Array2D<double> ptsSrc, ptsTgt;
-	TNT::Array2D<int> edgSrc, edgTgt;
+	MatrixX3d ptsSrc, ptsTgt;
+	MatrixX2i edgSrc, edgTgt;
 	GetVerticesEdges(dagSrc,ptsSrc,edgSrc);
 	GetVerticesEdges(dagTgt,ptsTgt,edgTgt);
-	sprintf(sInfo,"Source mesh has %d vertics, %d edges",ptsSrc.dim1(),edgSrc.dim1());
+	sprintf(sInfo,"Source mesh has %ld vertics, %ld edges",ptsSrc.rows(),edgSrc.rows());
 	MGlobal::displayInfo(sInfo);
-	sprintf(sInfo,"Target mesh has %d vertics, %d edges",ptsTgt.dim1(),edgTgt.dim1());
+	sprintf(sInfo,"Target mesh has %ld vertics, %ld edges",ptsTgt.rows(),edgTgt.rows());
 	MGlobal::displayInfo(sInfo);
 	Initialise(ptsSrc);
-	TNT::Array2D<double> ptsNN;
+	MatrixX3d ptsNN;
 	Match(ptsSrc,ptsTgt,ptsNN);
-	TNT::Array2D<double> ptsDD;
+	MatrixX3d ptsDD;
 	Deform(ptsSrc,ptsDD);
 	ModifyVertices(dagSrc,ptsDD);
 	return MS::kSuccess;
 }
 
 //
+// Return the selected models - must select TWO models SRC & TGT
+//
+int nicp3d::GetModels (MDagPath& dag0, MDagPath& dag1) {
+	MSelectionList list;
+	MGlobal::getActiveSelectionList(list);
+	if (list.length()>=2) {
+		list.getDagPath(0,dag0);
+		list.getDagPath(1,dag1);
+	}
+	return list.length();
+}
+
+//
+// Return the vertices of the mesh in Numpy.Array
+//
+void nicp3d::GetVerticesEdges (MDagPath dag, MatrixX3d& vert, MatrixX2i & edg) {
+	MFnMesh mesh(dag);
+	//-- Get vertices
+	MPointArray pts;
+	mesh.getPoints(pts,MSpace::kWorld);
+	int nVert = pts.length();
+	MatrixX3d v(nVert,3);
+	for (int i=0; i<nVert; i++) {
+		v(i,0) = pts[i].x;
+		v(i,1) = pts[i].y;
+		v(i,2) = pts[i].z;
+	}
+	vert = v;
+	//-- Get edges
+	int nEdg = mesh.numEdges();
+	MatrixX2i e(nEdg,2);
+	int2 v2;
+	for (int i=0; i<nEdg; i++) {
+		mesh.getEdgeVertices(i,v2);
+		e(i,0) = v2[0];
+		e(i,1) = v2[1];
+	}
+	edg = e;
+}
+
+//
+// Intialise parameters and weights
+//
+void nicp3d::Initialise (const MatrixX3d vert) {
+	char sInfo[512];
+	int nLen = vert.rows();
+	//--- Initialise parameters: A = Identity, b = zeros, Rxyz = 0, Txyz = 0
+	params = VectorXd::Zero(nLen*12+6);
+	for (int i=0; i<nLen; i++) {
+		int ii = i*12;
+		params(ii) = 1.0;
+		params(ii+4) = 1.0;
+		params(ii+8) = 1.0;
+	}
+	int nParams = params.rows();
+	params(nParams-5) = 0.5;
+	params(nParams-1) = 2.0;
+	//-- Calculate weights
+	int idxKnn[NUM_NN+2];
+	double distKnn[NUM_NN+2];
+	double distSum, distMax, denom;
+	weights = MatrixXd::Zero(nLen,nLen);
+	for (int j=0; j<nLen; j++) {
+		KNN(vert,vert.row(j),NUM_NN+2,idxKnn,distKnn);
+		/* DEBUG PRINT *
+		sprintf(sInfo,"%2d: %2d %2d %2d %2d %2d %2d %f %f %f %f %f %f\n",j,
+			idxKnn[0],idxKnn[1],idxKnn[2],idxKnn[3],idxKnn[4],idxKnn[5],
+			distKnn[0],distKnn[1],distKnn[2],distKnn[3],distKnn[4],distKnn[5]);
+		MGlobal::displayInfo(sInfo);
+		* DEBUG PRINT */
+		distSum = 0;
+		distMax = distKnn[NUM_NN+1];
+		for (int i=1; i<NUM_NN+1; i++)
+			distSum += distKnn[i];
+		denom = (double)NUM_NN - distSum / distMax;
+		for (int i=1; i<NUM_NN+1; i++)
+			weights(idxKnn[i],j) = (1 - distKnn[i]/distMax) / denom;
+	}
+	/* DEBUG PRINT *
+	for (int i=0; i<10; i++) {
+		sprintf(sInfo,"%2d %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f", i,
+		weights(i,0),weights(i,1),weights(i,2),weights(i,3),weights(i,4),weights(i,5),weights(i,6),weights(i,7),weights(i,8),weights(i,9),
+		weights(i,10),weights(i,11),weights(i,12),weights(i,13),weights(i,14),weights(i,15),weights(i,16),weights(i,17),weights(i,18),weights(i,19));
+		MGlobal::displayInfo(sInfo);
+	}
+	* DEBUG PRINT */
+}
+
+//
 // Return the indices and distances of the k nearest neighbors in the array
 // If pt is in dset, it is the closest point & sort(dist)[0] = 0.0
 //
-int nicp3d::KNN (TNT::Array2D <double> dataset, double* pt, int k, int* idx, double* dist) {
+int nicp3d::KNN (const MatrixX3d& dataset, const RowVector3d& pt, int k, int* idx, double* dist) {
 	typedef std::pair <double, int> PAIR;
 	class compare {
 	public:
@@ -109,10 +196,10 @@ int nicp3d::KNN (TNT::Array2D <double> dataset, double* pt, int k, int* idx, dou
 	
 	//-- Calculate the distance and put into the rank
 	double d;
-	for (int i=0; i<dataset.dim1(); i++) {
+	for (int i=0; i<dataset.rows(); i++) {
 		//TNT::Array1D<double> p(dataset.dim2(),dataset[i]);
 		//d = Distance(p,pt);
-		d = Distance(dataset[i],pt);
+		d = Distance(dataset.row(i),pt);
 		if (rank.size()<k) {
 			PAIR d_idx(d,i);
 			rank.push(d_idx);
@@ -139,19 +226,17 @@ int nicp3d::KNN (TNT::Array2D <double> dataset, double* pt, int k, int* idx, dou
 //
 // Return the index of the closest point in the array
 //
-int nicp3d::Closest (TNT::Array2D<double> dataset, double* pt, double* minDist) {
-	double dist;
+int nicp3d::Closest (const MatrixX3d& dataset, const RowVector3d& pt, double* minDist) {
 	//-- Initialise with first point in dataset 
-	//TNT::Array1D<double> p(dataset.dim2(),dataset[0]);
-	//double min = Distance(p,pt);
-	double min = Distance(dataset[0],pt);
+	double min = Distance(dataset.row(0),pt);
 	int idx = 0;
 	//-- Compare with the other points
-	int nLen = dataset.dim1();
+	double dist;
+	int nLen = dataset.rows();
 	for (int i=1; i<nLen; i++) {
 		//p = TNT::Array1D<double> (dataset.dim2(),dataset[i]);
 		//dist = Distance(p,pt);
-		dist = Distance(dataset[i],pt);
+		dist = Distance(dataset.row(i),pt);
 		if (dist<min) {
 			min = dist;
 			idx = i;
@@ -164,108 +249,19 @@ int nicp3d::Closest (TNT::Array2D<double> dataset, double* pt, double* minDist) 
 }
 
 //
-// Return the selected models - must select TWO models SRC & TGT
-//
-int nicp3d::GetModels (MDagPath& dag0, MDagPath& dag1) {
-	MSelectionList list;
-	MGlobal::getActiveSelectionList(list);
-	if (list.length()>=2) {
-		list.getDagPath(0,dag0);
-		list.getDagPath(1,dag1);
-	}
-	return list.length();
-}
-
-//
-// Intialise parameters and weights
-//
-void nicp3d::Initialise (TNT::Array2D<double> vert) {
-	char sInfo[512];
-	int nLen = vert.dim1();
-	//--- Initialise parameters: A = Identity, b = zeros, Rxyz = 0, Txyz = 0
-	params = TNT::Array1D<double>(nLen*12+6,0.0);
-	for (int i=0; i<nLen; i++) {
-		int ii = i*12;
-		params[ii] = 1.0;
-		params[ii+4] = 1.0;
-		params[ii+8] = 1.0;
-	}
-	int nParams = params.dim1();
-	params[nParams-1] = 2.0;
-	//-- Calculate weights
-	int idxKnn[NUM_NN+2];
-	double distKnn[NUM_NN+2];
-	double distSum, distMax, denom;
-	weights = TNT::Array2D<double>(nLen,nLen,0.0);
-	for (int j=0; j<nLen; j++) {
-		KNN(vert,vert[j],NUM_NN+2,idxKnn,distKnn);
-		/* DEBUG PRINT *
-		sprintf(sInfo,"%2d: %2d %2d %2d %2d %2d %2d %f %f %f %f %f %f\n",j,
-			idxKnn[0],idxKnn[1],idxKnn[2],idxKnn[3],idxKnn[4],idxKnn[5],
-			distKnn[0],distKnn[1],distKnn[2],distKnn[3],distKnn[4],distKnn[5]);
-		MGlobal::displayInfo(sInfo);
-		* DEBUG PRINT */
-		distSum = 0;
-		distMax = distKnn[NUM_NN+1];
-		for (int i=1; i<NUM_NN+1; i++)
-			distSum += distKnn[i];
-		denom = (double)NUM_NN - distSum / distMax;
-		for (int i=1; i<NUM_NN+1; i++)
-			weights[idxKnn[i]][j] = (1 - distKnn[i]/distMax) / denom;
-	}
-	/* DEBUG PRINT *
-	for (int i=0; i<10; i++) {
-		sprintf(sInfo,"%2d %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f", i,
-		weights[i][0],weights[i][1],weights[i][2],weights[i][3],weights[i][4],weights[i][5],weights[i][6],weights[i][7],weights[i][8],weights[i][9],
-		weights[i][10],weights[i][11],weights[i][12],weights[i][13],weights[i][14],weights[i][15],weights[i][16],weights[i][17],weights[i][18],weights[i][19]);
-		MGlobal::displayInfo(sInfo);
-	}
-	* DEBUG PRINT */
-}
-
-
-//
-// Return the vertices of the mesh in Numpy.Array
-//
-void nicp3d::GetVerticesEdges (MDagPath dag, TNT::Array2D<double>& vert, TNT::Array2D<int>& edg) {
-	MFnMesh mesh(dag);
-	//-- Get vertices
-	MPointArray pts;
-	mesh.getPoints(pts,MSpace::kWorld);
-	int nVert = pts.length();
-	TNT::Array2D<double> v(nVert,3);
-	for (int i=0; i<nVert; i++) {
-		v[i][0] = pts[i].x;
-		v[i][1] = pts[i].y;
-		v[i][2] = pts[i].z;
-	}
-	vert = v;
-	//-- Get edges
-	int nEdg = mesh.numEdges();
-	TNT::Array2D<int> e(nEdg,2);
-	int2 v2;
-	for (int i=0; i<nEdg; i++) {
-		mesh.getEdgeVertices(i,v2);
-		e[i][0] = v2[0];
-		e[i][1] = v2[1];
-	}
-	edg = e;
-}
-
-//
 // For each point in source, find the closest point in the target. 
 // Return the closest points in array
 //
-void nicp3d::Match (TNT::Array2D<double> source, TNT::Array2D<double> target, TNT::Array2D<double>& matchset) {
-	int nLen = source.dim1();
+void nicp3d::Match (const MatrixX3d& source, const MatrixX3d& target, MatrixX3d& matchset) {
+	int nLen = source.rows();
 	int idx;
 	char sInfo[100];
-	matchset = TNT::Array2D<double> (nLen,3);
+	matchset = MatrixX3d (nLen,3);
 	for (int i=0; i<nLen; i++) {
-		idx = Closest(target,source[i]);
-		memcpy(matchset[i],target[idx],sizeof(double)*3);
+		idx = Closest(target,source.row(i));
+		matchset.row(i) = target.row(idx);
 		/* DEBUG PRINT *
-		sprintf(sInfo,"%f %f %f",matchset[i][0],matchset[i][1],matchset[i][2]);
+		sprintf(sInfo,"%f %f %f",matchset(i,0),matchset(i,1),matchset(i,2));
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
 	}
@@ -274,160 +270,140 @@ void nicp3d::Match (TNT::Array2D<double> source, TNT::Array2D<double> target, TN
 //
 // Deform the mesh using parameters
 //
-void nicp3d::Deform (TNT::Array2D<double> dataset, TNT::Array2D<double>& deformset) {
+void nicp3d::Deform (const MatrixX3d& dataset, MatrixX3d& deformset) {
 	char sInfo[5000];
 
-	int nLen = dataset.dim1();
-	deformset = TNT::Array2D<double> (nLen,3);
+	int nLen = dataset.rows();
+	deformset = MatrixXd::Zero(nLen,3);
 
-	TNT::Array2D<double> A;
-	TNT::Array1D<double> b;
-	TNT::Array1D<double> tmp;
+	Matrix3d A;
+	RowVector3d b;
+	RowVector3d tmp;
 
 	for (int i=0; i<nLen; i++) {
-		deformset[i][0] = deformset[i][1] = deformset[i][2] = 0.0;
+		//deformset[i][0] = deformset[i][1] = deformset[i][2] = 0.0;
 		for (int j=0; j<nLen; j++) {
-			if (weights[j][i]!=0) {
+			if (weights(j,i)!=0) {
 				PtoAB(j,A,b);
 				/* DEBUG PRINT *
 				sprintf(sInfo,"(%f,%f,%f %f,%f,%f %f,%f,%f) (%f,%f,%f)",
-					A[0][0],A[0][1],A[0][2],
-					A[1][0],A[1][1],A[1][2],
-					A[2][0],A[2][1],A[2][2],
-					b[0],b[1],b[2]);
+					A(0,0),A(0,1),A(0,2),
+					A(1,0),A(1,1),A(1,2),
+					A(2,0),A(2,1),A(2,2),
+					b(0),b(1),b(2));
 				MGlobal::displayInfo(sInfo);
 				* DEBUG PRINT */
 				/* DEBUG PRINT *
 				if (i<5) {
-					sprintf(sInfo,"%d(%f,%f,%f) %d(%f,%f,%f)",i,dataset[i][0],dataset[i][1],dataset[i][2],j,dataset[j][0],dataset[j][1],dataset[j][2]);
+					sprintf(sInfo,"%d(%f,%f,%f) %d(%f,%f,%f)",i,dataset(i,0),dataset(i,1),dataset(i,2),j,dataset(j,0),dataset(j,1),dataset(j,2));
 					MGlobal::displayInfo(sInfo);
-					tmp = TNT::Array1D<double>(3,dataset[i]) - TNT::Array1D<double>(3,dataset[j]);
-					sprintf(sInfo,"(%f,%f,%f)",tmp[0],tmp[1],tmp[2]);
+					tmp = dataset.row(i) - dataset.row(j);
+					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
 					MGlobal::displayInfo(sInfo);
-					sprintf(sInfo,"A=(%f,%f,%f)",A[0][0],A[0][1],A[0][2]);
+					sprintf(sInfo,"A=(%f,%f,%f %f,%f,%f %f,%f,%f)",
+						A(0,0),A(0,1),A(0,2),A(1,0),A(1,1),A(1,2),A(2,0),A(2,1),A(2,2));
 					MGlobal::displayInfo(sInfo);
-					sprintf(sInfo,"  (%f,%f,%f)",A[1][0],A[1][1],A[1][2]);
+					tmp = tmp * A;
+					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
 					MGlobal::displayInfo(sInfo);
-					sprintf(sInfo,"  (%f,%f,%f)",A[2][0],A[2][1],A[2][2]);
+					tmp = tmp + dataset.row(j);
+					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
 					MGlobal::displayInfo(sInfo);
-					tmp = TNT::matmult(tmp,A);
-					sprintf(sInfo,"(%f,%f,%f)",tmp[0],tmp[1],tmp[2]);
+					tmp = tmp + b;
+					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
 					MGlobal::displayInfo(sInfo);
-					tmp += TNT::Array1D<double>(3,dataset[j]);
-					sprintf(sInfo,"(%f,%f,%f)",tmp[0],tmp[1],tmp[2]);
+					tmp = tmp * weights(j,i);
+					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
 					MGlobal::displayInfo(sInfo);
-					tmp += b;
-					sprintf(sInfo,"(%f,%f,%f)",tmp[0],tmp[1],tmp[2]);
-					MGlobal::displayInfo(sInfo);
-					tmp *= weights[j][i];
-					sprintf(sInfo,"(%f,%f,%f)",tmp[0],tmp[1],tmp[2]);
-					MGlobal::displayInfo(sInfo);
-					deformset[i][0] += tmp[0];
-					deformset[i][1] += tmp[1];
-					deformset[i][2] += tmp[2];
+					deformset(i,0) += tmp(0);
+					deformset(i,1) += tmp(1);
+					deformset(i,2) += tmp(2);
 				} else {
 				* DEBUG PRINT */
-					tmp = TNT::Array1D<double>(3,dataset[i]) - TNT::Array1D<double>(3,dataset[j]);
-					tmp = TNT::matmult(tmp,A);
-					tmp += TNT::Array1D<double>(3,dataset[j]);
-					tmp += b;
-					tmp *= weights[j][i];
-					deformset[i][0] += tmp[0];
-					deformset[i][1] += tmp[1];
-					deformset[i][2] += tmp[2];
+					tmp = dataset.row(i) - dataset.row(j);
+					tmp = tmp * A;
+					tmp = tmp + dataset.row(j);
+					tmp = tmp + b;
+					tmp = tmp * weights(j,i);
+					deformset(i,0) += tmp(0);
+					deformset(i,1) += tmp(1);
+					deformset(i,2) += tmp(2);
 				//}
 			}
 		}
 		/* DEBUG PRINT *
-		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,dataset[i][0],dataset[i][1],dataset[i][2],deformset[i][0],deformset[i][1],deformset[i][2]);
+		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,dataset(i,0),dataset(i,1),dataset(i,2),deformset(i,0),deformset(i,1),deformset(i,2));
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
 	}	
 	//-- Global transformation
-	int nParam = params.dim1();
-	TNT::Array2D<double> Rot;
+	int nParam = params.rows();
+	Matrix3d Rot;
 	RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4],Rot);
-	TNT::Array1D<double> Txn = params.subarray(nParam-3,nParam-1);
+	RowVector3d Txn = params.segment<3>(nParam-3);
+	MatrixX3d txnset(nLen,3);
+	txnset.col(0) = VectorXd::Constant(nLen,Txn(0));
+	txnset.col(1) = VectorXd::Constant(nLen,Txn(1));
+	txnset.col(2) = VectorXd::Constant(nLen,Txn(2));
 
 	//--
 	//-- Printing content of Rot will reset it to Zero. ????????
 	//--
 	/* DEBUG PRRINT *
 	sprintf(sInfo,"R=(%f,%f,%f %f,%f,%f %f,%f,%f) T=(%f,%f,%f)",
-		Rot[0][0],Rot[0][1],Rot[0][2], Rot[1][0],Rot[1][1],Rot[1][2], Rot[2][0],Rot[2][1],Rot[2][2],
-		Txn[0],Txn[1],Txn[2]);
+		Rot(0,0),Rot(0,1),Rot(0,2), Rot(1,0),Rot(1,1),Rot(1,2), Rot(2,0),Rot(2,1),Rot(2,2),
+		Txn(0),Txn(1),Txn(2));
 	MGlobal::displayInfo(sInfo);
 	* DEBUG PRINT */
 	
-	deformset = TNT::matmult(deformset,Rot);
-	deformset = TNT::addrow(deformset,Txn);
-	//deformset = TNT::addrow(TNT::matmult(deformset,Rot),Txn);
-	/* DEBUG PRINT *
+	deformset = deformset * Rot;
+	deformset = deformset + txnset;
+	/* DEBUG PRINT */
 	for (int i=0; i<nLen; i++) {
-		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,dataset[i][0],dataset[i][1],dataset[i][2],deformset[i][0],deformset[i][1],deformset[i][2]);
+		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,dataset(i,0),dataset(i,1),dataset(i,2),deformset(i,0),deformset(i,1),deformset(i,2));
 		MGlobal::displayInfo(sInfo);
 	}
-	* DEBUG PRINT */
+	/* DEBUG PRINT */
 }
 
 //
 // Extract A & b from P for a vertex
 //
-void nicp3d::PtoAB (int i, TNT::Array2D<double>& A, TNT::Array1D<double>& b) {
-	A = TNT::Array2D<double> (3,3,params.subarray(i*12,i*12+8));
-	b = params.subarray(i*12+9,i*12+11);
+void nicp3d::PtoAB (int i, Matrix3d& A, RowVector3d& b) {
+	A.row(0) = params.segment<3>(i*12);
+	A.row(1) = params.segment<3>(i*12+3);
+	A.row(2) = params.segment<3>(i*12+6);
+	b = params.segment<3>(i*12+9);
 }
 
 //
 // Rotational matrix - rotate sequence = X, Y, Z
 //
-void nicp3d::RotMatrix (double x, double y, double z, TNT::Array2D<double>& rot) {
+void nicp3d::RotMatrix (double x, double y, double z, Matrix3d& rot) {
 	double sx = sin(x);
 	double cx = cos(x);
 	double sy = sin(y);
 	double cy = cos(y);
 	double sz = sin(z);
 	double cz = cos(z);
-	rot = TNT::Array2D<double> (3,3);
-	rot[0][0] = cy*cz; rot[0][1] = cy*sz; rot[0][2] = -sy; 
-	rot[1][0] = sx*sy*cz-cx*sz; rot[1][1] = sx*sy*sz+cx*cz; rot[1][2] = sx*cy;
-	rot[2][0] = cx*sy*cz+sx*sz; rot[2][1] = cx*sy*sz-sx*cz; rot[2][2] = cx*cy; 
+	rot << cy*cz, cy*sz, -sy, 
+		sx*sy*cz-cx*sz, sx*sy*sz+cx*cz, 
+		sx*cy, cx*sy*cz+sx*sz, cx*sy*sz-sx*cz, cx*cy; 
 }
 
 //
-// Rotational matrix - rotate sequence = X, Y, Z
+// Change the vertices to new locations
 //
-void nicp3d::D_RotMatrix (double x, double y, double z, TNT::Array2D<double>& drotx, TNT::Array2D<double>& droty, TNT::Array2D<double>& drotz) {	
-	double sx = sin(x);
-	double cx = cos(x);
-	double sy = sin(y);
-	double cy = cos(y);
-	double sz = sin(z);
-	double cz = cos(z);
-
-	drotx = TNT::Array2D<double> (3,3);
-	drotx[0][0] = 0; drotx[0][1] = 0; drotx[0][2] = 0; 
-	drotx[1][0] = cx*sy*cz+sx*sz; drotx[1][1] = cx*sy*sz-sx*cz; drotx[1][2] = cx*cy; 
-	drotx[2][0] = -sx*sy*cz+cx*sz; drotx[2][1] = -sx*sy*sz-cx*cz; drotx[2][2] = -sx*cy;
-
-	droty = TNT::Array2D<double> (3,3);
-	droty[0][0] = -sy*cz; droty[0][1] = -sy*sz; droty[0][2] = -cy; 
-	droty[1][0] = sx*cy*cz; droty[1][1] = sx*cy*sz; droty[1][2] = -sx*sy; 
-	droty[2][0] = cx*cy*cz; droty[2][1] = cx*cy*sz; droty[2][2] = -cx*sy;
-
-	drotz = TNT::Array2D<double> (3,3);
-	drotz[0][0] = -cy*sz; drotz[0][1] = cy*cz; drotz[0][2] = 0; 
-	drotz[1][0] = -sx*sy*sz-cx*cz; drotz[1][1] = sx*sy*cz-cx*sz; drotz[1][2] = 0; 
-	drotz[2][0] = -cx*sy*sz+sx*cz; drotz[2][1] = cx*sy*cz+sx*sz; drotz[2][2] = 0;
-}
-
-void nicp3d::ModifyVertices (MDagPath path, TNT::Array2D<double> dataset) {
-	int nLen = dataset.dim1();
+void nicp3d::ModifyVertices (MDagPath path, const RowVector3d& dataset) {
+	int nLen = dataset.rows();
 	MPointArray pts(nLen);
-	for (int i=0; i<nLen; i++)
-		pts.set(i,dataset[i][0],dataset[i][1],dataset[i][2]);
+//	for (int i=0; i<nLen; i++)
+//		pts.set(i,dataset(i,0),dataset(i,1),dataset(i,2));
+	char sInfo[200];
+	sprintf(sInfo,"%d",nLen);
+	MGlobal::displayInfo(sInfo);
 	MFnMesh mesh(path);
-	mesh.setPoints(pts,MSpace::kWorld);
+//	mesh.setPoints(pts,MSpace::kWorld);
 }
 
 
