@@ -45,7 +45,8 @@ private:
 	void Deform (const MatrixX3d& dataset, MatrixX3d& deformset);
 	void PtoAB (int i, Matrix3d& A, RowVector3d& b);
 	void RotMatrix (double x, double y, double z, Matrix3d& rot);
-	void ModifyVertices (MDagPath path, const RowVector3d& dataset);
+	void ModifyVertices (MDagPath path, const MatrixX3d& dataset);
+	void D_RotMatrix (double x, double y, double z, Matrix3d& drotx, Matrix3d& droty, Matrix3d& drotz);
 };
 
 //
@@ -358,12 +359,12 @@ void nicp3d::Deform (const MatrixX3d& dataset, MatrixX3d& deformset) {
 	
 	deformset = deformset * Rot;
 	deformset = deformset + txnset;
-	/* DEBUG PRINT */
+	/* DEBUG PRINT *
 	for (int i=0; i<nLen; i++) {
 		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,dataset(i,0),dataset(i,1),dataset(i,2),deformset(i,0),deformset(i,1),deformset(i,2));
 		MGlobal::displayInfo(sInfo);
 	}
-	/* DEBUG PRINT */
+	* DEBUG PRINT */
 }
 
 //
@@ -392,18 +393,40 @@ void nicp3d::RotMatrix (double x, double y, double z, Matrix3d& rot) {
 }
 
 //
-// Change the vertices to new locations
+// Update vertices of the mesh using the dataset 
 //
-void nicp3d::ModifyVertices (MDagPath path, const RowVector3d& dataset) {
+void nicp3d::ModifyVertices (MDagPath path, const MatrixX3d& dataset) {
 	int nLen = dataset.rows();
 	MPointArray pts(nLen);
-//	for (int i=0; i<nLen; i++)
-//		pts.set(i,dataset(i,0),dataset(i,1),dataset(i,2));
-	char sInfo[200];
-	sprintf(sInfo,"%d",nLen);
-	MGlobal::displayInfo(sInfo);
+	for (int i=0; i<nLen; i++)
+		pts.set(i,dataset(i,0),dataset(i,1),dataset(i,2));
 	MFnMesh mesh(path);
-//	mesh.setPoints(pts,MSpace::kWorld);
+	mesh.setPoints(pts,MSpace::kWorld);
+	return;
+}
+
+//
+// Partial differentiation of the Rotational matrix - rotate sequence = X, Y, Z
+//
+void nicp3d::D_RotMatrix (double x, double y, double z, Matrix3d& drotx, Matrix3d& droty, Matrix3d& drotz) {	
+	double sx = sin(x);
+	double cx = cos(x);
+	double sy = sin(y);
+	double cy = cos(y);
+	double sz = sin(z);
+	double cz = cos(z);
+	//-- Partial differentiation wrt theta-X
+	drotx << 0, 0, 0,
+		cx*sy*cz+sx*sz, cx*sy*sz-sx*cz, cx*cy,
+		-sx*sy*cz+cx*sz, -sx*sy*sz-cx*cz, -sx*cy;
+	//-- Partial differentiation wrt theta-Y
+	droty << -sy*cz, -sy*sz, -cy,
+		sx*cy*cz, sx*cy*sz, -sx*sy,
+		cx*cy*cz, cx*cy*sz, -cx*sy;
+	//-- Partial differentiation wrt theta-Z
+	drotz << -cy*sz, cy*cz, 0,
+		-sx*sy*sz-cx*cz, sx*sy*cz-cx*sz, 0
+		-cx*sy*sz+sx*cz, cx*sy*cz+sx*sz, 0;
 }
 
 
