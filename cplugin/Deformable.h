@@ -16,15 +16,20 @@ using namespace Eigen;
 using namespace Eigen;
 
 class Deformable : public Mesh {
+
 public:
+	// Constructors
 	Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k=DEF_KNN);
 	Deformable (const Mesh& m) : Deformable (m.Vertices(), m.Edges()) {};
-	Mesh Deform (VectorXd& params);
-	void PtoAB (VectorXd& params, int i, Matrix3d& A, RowVector3d& b);
-	Matrix3d RotMatrix (const double x, const double y, const double z) const;
-	void D_RotMatrix (const double x, const double y, const double z, Matrix3d& drot_dx, Matrix3d& drot_dy, Matrix3d& drot_dz) const;
+	// Main functions
+	Mesh Deform (const VectorXd& params) const;
+	// Supporting functions 
+	static void PtoAB (const VectorXd& params, int i, Matrix3d& A, RowVector3d& b);
+	static Matrix3d RotMatrix (const double x, const double y, const double z);
+	static void D_RotMatrix (const double x, const double y, const double z, Matrix3d& drot_dx, Matrix3d& drot_dy, Matrix3d& drot_dz);
+
 private:
-	int knn;
+	const int knn;
 	MatrixXd weights;
 };
 

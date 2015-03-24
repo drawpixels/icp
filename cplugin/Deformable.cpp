@@ -55,7 +55,7 @@ Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k)
 //
 // Deform the mesh using parameters
 //
-Mesh Deformable::Deform (VectorXd& params) {
+Mesh Deformable::Deform (const VectorXd& params) const {
 	char sInfo[5000];
 
 	int nLen = NumVertices();
@@ -69,7 +69,7 @@ Mesh Deformable::Deform (VectorXd& params) {
 		//deformset[i][0] = deformset[i][1] = deformset[i][2] = 0.0;
 		for (int j=0; j<nLen; j++) {
 			if (weights(j,i)!=0) {
-				PtoAB(params,j,A,b);
+				Deformable::PtoAB(params,j,A,b);
 				/* DEBUG PRINT *
 				sprintf(sInfo,"(%f,%f,%f %f,%f,%f %f,%f,%f) (%f,%f,%f)",
 					A(0,0),A(0,1),A(0,2),
@@ -124,7 +124,7 @@ Mesh Deformable::Deform (VectorXd& params) {
 	}
 	//-- Global transformation
 	int nParam = params.rows();
-	Matrix3d Rot = RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4]);
+	Matrix3d Rot = Deformable::RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4]);
 	RowVector3d Txn = params.segment<3>(nParam-3);
 	MatrixX3d txnset(nLen,3);
 	txnset.col(0) = VectorXd::Constant(nLen,Txn(0));
@@ -155,7 +155,7 @@ Mesh Deformable::Deform (VectorXd& params) {
 //
 // Extract A & b from P for a vertex
 //
-void Deformable::PtoAB (VectorXd& params, int i, Matrix3d& A, RowVector3d& b) {
+void Deformable::PtoAB (const VectorXd& params, int i, Matrix3d& A, RowVector3d& b) {
 	A.row(0) = params.segment<3>(i*12);
 	A.row(1) = params.segment<3>(i*12+3);
 	A.row(2) = params.segment<3>(i*12+6);
@@ -165,7 +165,7 @@ void Deformable::PtoAB (VectorXd& params, int i, Matrix3d& A, RowVector3d& b) {
 //
 // Rotational matrix - rotate sequence = X, Y, Z
 //
-Matrix3d Deformable::RotMatrix (const double x, const double y, const double z) const {
+Matrix3d Deformable::RotMatrix (const double x, const double y, const double z) {
 	double sx = sin(x);
 	double cx = cos(x);
 	double sy = sin(y);
@@ -182,7 +182,7 @@ Matrix3d Deformable::RotMatrix (const double x, const double y, const double z) 
 //
 // Partial differentiation of the Rotational matrix - rotate sequence = X, Y, Z
 //
-void Deformable::D_RotMatrix (const double x, const double y, const double z, Matrix3d& drot_dx, Matrix3d& drot_dy, Matrix3d& drot_dz) const {
+void Deformable::D_RotMatrix (const double x, const double y, const double z, Matrix3d& drot_dx, Matrix3d& drot_dy, Matrix3d& drot_dz) {
 	double sx = sin(x);
 	double cx = cos(x);
 	double sy = sin(y);

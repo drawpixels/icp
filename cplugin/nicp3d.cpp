@@ -23,7 +23,6 @@
 #include "Mesh.h"
 #include "Deformable.h"
 
-#define NUM_NN 4
 #define INIT_C_FIT 0.1
 #define INIT_C_RIGID 1000.0
 #define INIT_C_SMOOTH 100.0
@@ -39,9 +38,9 @@ public:
 private:
 	VectorXd params;
 	int GetModels (MDagPath& dag1, MDagPath& dag2);
-	Mesh GetMesh (MDagPath dag);
-	VectorXd Initialise (const Mesh m);
-	void ModifyVertices (MDagPath path, const MatrixX3d& dataset);
+	Mesh GetMesh (const MDagPath dag);
+	VectorXd Initialise (const Mesh& m);
+	void ModifyVertices (MDagPath path, const Mesh& m);
 };
 
 // Generic functor
@@ -59,8 +58,8 @@ struct Functor
 
 	int m_inputs, m_values;
 
-	Functor() : m_inputs(InputsAtCompileTime), m_values(ValuesAtCompileTime) {}
-	Functor(int inputs, int values) : m_inputs(inputs), m_values(values) {}
+	//Functor() : m_inputs(InputsAtCompileTime), m_values(ValuesAtCompileTime) {}
+	//Functor(int inputs, int values) : m_inputs(inputs), m_values(values) {}
 
 	int inputs() const { return m_inputs; }
 	int values() const { return m_values; }
@@ -71,41 +70,75 @@ struct Functor
 
 struct nicp_lm_functor : Functor<double>
 {
-	MatrixX3d& ptsSrc;
-	MatrixX3d& ptsTgt;
-	MatrixX2i& edgSrc;
-	MatrixXd& weights;
-	int srcLen;
-	int edgeLen;
+	Deformable mSource;
+	Mesh mTarget;
+	double c_fit, c_rigid, c_smooth;
 	
-	int setup(MatrixX3d& s, MatrixX3d& t, MatrixX2i& e, MatrixXd& w) {
-		int slen = s.rows();
-		int tlen = t.rows();
-		int elen = e.rows();
-		int wrows = w.rows();
-		int wcols = w.cols();
-		//-- Sizes of source, target and weights must match.
-		if ((slen!=tlen)||(slen!=wrows)||(slen!=wcols))
-			return 0;
-		//-- Size of source, parameters and outputs must match.
-		if ((m_inputs!=(slen*12+6))||(m_values!=(slen*12+elen*6)))
-			return 0;
-		ptsSrc = s;
-		ptsTgt = t;
-		edgSrc = e;
-		weights = w;
-		srcLen = slen;
-		edgeLen = elen;
-		return 1;
+	nicp_lm_functor(Mesh& s, Mesh& t) : mSource(s), mTarget(t) {
+		m_inputs = mSource.NumVertices()*12 + 6;
+		m_values = mSource.NumVertices()*9 + mSource.NumEdges()*6;
+		c_fit = INIT_C_FIT;
+		c_rigid = INIT_C_RIGID;
+		c_smooth = INIT_C_SMOOTH;
+	}
+	
+	void SetCoeff(double f, double r, double s) {
+		c_fit = f;
+		c_rigid = r;
+		c_smooth = s;
 	}
 	
 	// x = (in) parameters, fvec = (out) output values using the parameters
     int operator()(const VectorXd &x, VectorXd &fvec) const
     {
+		int nVertices = mSource.NumVertices();
+		int nEdges = mSource.NumEdges();
+		int idx=0;	//-- Running index to fill up the output values
 		//-- E-fit
-		MatrixX3d deform;
-		for (int i=0; i<srcLen; i++) {
-			
+		Mesh DD = mSource.Deform(x);
+		for (int i=0; i<nVertices; i++) {
+			Vector3d delta = mTarget.Vertex(i) - DD.Vertex(i);
+			fvec(idx++) = delta(0) * c_fit;
+			fvec(idx++) = delta(1) * c_fit;
+			fvec(idx++) = delta(2) * c_fit;
+		}
+		//-- E-rigid
+		Matrix3d A;
+		RowVector3d b,a0,a1,a2;
+		for (int i; i<nVertices; i++) {
+			Deformable::PtoAB(x,i,A,b);
+			a0 = A.row(0);
+			a1 = A.row(1);
+			a2 = A.row(2);
+			fvec(idx++) = a0.dot(a1) * c_rigid;
+			fvec(idx++) = a1.dot(a2) * c_rigid;
+			fvec(idx++) = a2.dot(a0) * c_rigid;
+			fvec(idx++) = 1.0 - a0.dot(a0) * c_rigid;
+			fvec(idx++) = 1.0 - a1.dot(a1) * c_rigid;
+			fvec(idx++) = 1.0 - a2.dot(a2) * c_rigid;
+		}
+		//-- E-smooth
+		RowVector2i e;
+		int i0, i1;
+		RowVector3d v0, v1;
+		Matrix3d A0, A1;
+		RowVector3d b0, b1, s0, s1;
+		for (int i=0; i<nEdges; i++) {
+			e = mSource.Edge(i);
+			i0 = e(0);
+			i1 = e(1);
+			v0 = mSource.Vertex(i0);
+			v1 = mSource.Vertex(i1);
+			Deformable::PtoAB(x,i0,A0,b0);
+			Deformable::PtoAB(x,i1,A1,b1);
+			s0 = (v1-v0)*A0 + (v0+b0) - (v1+b1);
+			s1 = (v0-v1)*A1 + (v1+b1) - (v0+b0);
+			fvec(idx++) = s0(0) * c_smooth;
+			fvec(idx++) = s0(1) * c_smooth;
+			fvec(idx++) = s0(2) * c_smooth;
+			fvec(idx++) = s1(0) * c_smooth;
+			fvec(idx++) = s1(1) * c_smooth;
+			fvec(idx++) = s1(2) * c_smooth;
 		}
         return 0;
     }
@@ -138,19 +171,26 @@ MStatus nicp3d::doIt(const MArgList& argList) {
 	MGlobal::displayInfo(sInfo);
 	sprintf(sInfo,"Target mesh has %ld vertics, %ld edges",mTgt.Vertices().rows(),mTgt.Edges().rows());
 	MGlobal::displayInfo(sInfo);
+
 	VectorXd params = Initialise (mSrc);
-//	MatrixX3d ptsNN = mSrc.Match(mTgt);
-//	MatrixX3d ptsDD;
-//	mSrc.Deform(params,ptsDD);
-	Mesh NN = mSrc.Match(mTgt);
 	Mesh DD = mSrc.Deform(params);
+	Mesh NN = DD.Match(mTgt);
 	
-//	Initialise(ptsSrc);
-//	MatrixX3d ptsNN;
-//	Match(ptsSrc,ptsTgt,ptsNN);
-//	MatrixX3d ptsDD;
-//	Deform(ptsSrc,ptsDD);
-//	ModifyVertices(dagSrc,ptsDD);
+	int info;
+	DenseIndex nfev=0;
+	nicp_lm_functor functor(mSrc,NN);
+	info = LevenbergMarquardt<nicp_lm_functor>::lmdif1(functor,params,&nfev);
+	//NumericalDiff<nicp_lm_functor> numDiff(functor);
+	//LevenbergMarquardt<NumericalDiff<nicp_lm_functor> > lm(numDiff);
+	//info = lm.minimize(params);
+	sprintf(sInfo,"info=%d,DIdx=%ld %f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f",
+		info,nfev,params(0),params(1),params(2),params(3),params(4),params(5),
+		params(6),params(7),params(8),params(9),params(10),params(11));
+	MGlobal::displayInfo(sInfo);
+	
+	DD = mSrc.Deform(params);
+	ModifyVertices(dagSrc,DD);
+	
 	return MS::kSuccess;
 }
 
@@ -170,7 +210,7 @@ int nicp3d::GetModels (MDagPath& dag0, MDagPath& dag1) {
 //
 // Return the vertices of the mesh in Numpy.Array
 //
-Mesh nicp3d::GetMesh (MDagPath dag) {
+Mesh nicp3d::GetMesh (const MDagPath dag) {
 	MFnMesh mesh(dag);
 	//-- Get vertices
 	MPointArray pts;
@@ -198,7 +238,7 @@ Mesh nicp3d::GetMesh (MDagPath dag) {
 //
 // Intialise parameters and weights
 //
-VectorXd nicp3d::Initialise (const Mesh m) {
+VectorXd nicp3d::Initialise (const Mesh& m) {
 	int nLen = m.NumVertices();
 	//--- Initialise parameters: A = Identity, b = zeros, Rxyz = 0, Txyz = 0
 	VectorXd p = VectorXd::Zero(nLen*12+6);
@@ -208,17 +248,19 @@ VectorXd nicp3d::Initialise (const Mesh m) {
 		p(ii+4) = 1.0;
 		p(ii+8) = 1.0;
 	}
+	//int n = p.rows();
+	//p(n-1) = 5.0;
 	return p;
 }
 
 //
 // Update vertices of the mesh using the dataset 
 //
-void nicp3d::ModifyVertices (MDagPath path, const MatrixX3d& dataset) {
-	int nLen = dataset.rows();
+void nicp3d::ModifyVertices (MDagPath path, const Mesh& m) {
+	int nLen = m.NumVertices();
 	MPointArray pts(nLen);
 	for (int i=0; i<nLen; i++)
-		pts.set(i,dataset(i,0),dataset(i,1),dataset(i,2));
+		pts.set(i,m.Vertex(i)(0),m.Vertex(i)(1),m.Vertex(i)(2));
 	MFnMesh mesh(path);
 	mesh.setPoints(pts,MSpace::kWorld);
 	return;

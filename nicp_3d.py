@@ -15,9 +15,9 @@ from scipy import optimize
 Global Parameters
 '''
 num_nn = 4
-c_fit = 0.1
-c_rigid = 1000.0
-c_smooth = 100.0
+c_fit = 1
+c_rigid = 100.0
+c_smooth = 10.0
 
 '''
 Return the selected models - must select TWO models SRC & TGT
@@ -73,7 +73,7 @@ def Match (source, target):
 	for i in range(source.shape[0]):
 		c = Closest(target,source[i])
 		nn[i] = target[c]
-		print nn[i]
+		#print nn[i]
 	return nn
 
 '''
@@ -162,7 +162,7 @@ def Initialise (source, target):
 		denom = num_nn - dist[1:-1].sum()/dist[-1]
 		for i in range(1,num_nn+1):
 			w[idx[i],j] = (1 - dist[i]/dist[-1]) / denom
-	#print w[0:10,0:10]
+	#print w[0:20,0:20]
 	return (P,w)
 
 '''
@@ -245,12 +245,12 @@ def MinFunc (P, w, srcdata, edges, tgtdata):
 	e_rigid = np.zeros(src_len*6)
 	for i in range(src_len):
 		A, b = PtoAB(P,i)
-		e_rigid[i*3]   = A[0,0]*A[1,0] + A[0,1]*A[1,1] + A[0,2]*A[1,2]
-		e_rigid[i*3+1] = A[1,0]*A[2,0] + A[1,1]*A[2,1] + A[1,2]*A[2,2]
-		e_rigid[i*3+2] = A[2,0]*A[0,0] + A[2,1]*A[0,1] + A[2,2]*A[0,2]
-		e_rigid[i*3+3] = 1 - A[0,0]*A[0,0] - A[0,1]*A[0,1] - A[0,2]*A[0,2]
-		e_rigid[i*3+4] = 1 - A[1,0]*A[1,0] - A[1,1]*A[1,1] - A[1,2]*A[1,2]
-		e_rigid[i*3+5] = 1 - A[2,0]*A[2,0] - A[2,1]*A[2,1] - A[2,2]*A[2,2]
+		e_rigid[i*6]   = A[0,0]*A[1,0] + A[0,1]*A[1,1] + A[0,2]*A[1,2]
+		e_rigid[i*6+1] = A[1,0]*A[2,0] + A[1,1]*A[2,1] + A[1,2]*A[2,2]
+		e_rigid[i*6+2] = A[2,0]*A[0,0] + A[2,1]*A[0,1] + A[2,2]*A[0,2]
+		e_rigid[i*6+3] = 1 - A[0,0]*A[0,0] - A[0,1]*A[0,1] - A[0,2]*A[0,2]
+		e_rigid[i*6+4] = 1 - A[1,0]*A[1,0] - A[1,1]*A[1,1] - A[1,2]*A[1,2]
+		e_rigid[i*6+5] = 1 - A[2,0]*A[2,0] - A[2,1]*A[2,1] - A[2,2]*A[2,2]
 	#-- E-smooth
 	e_smooth = np.zeros((edge_len*2,3))
 	for i in range(edge_len):
@@ -403,9 +403,9 @@ def main():
 			print ("Source mode has {0:d} vertices, {1:d} edges".format(srcPts.shape[0],srcEdges.shape[0]))
 			print ("Target mode has {0:d} vertices, {1:d} edges".format(tgtPts.shape[0],tgtEdges.shape[0]))
 			P0,w = Initialise(srcPts,tgtPts)
-			nn = Match(srcPts,tgtPts)
-			#newPts, P = NICP(P0,w,srcPts,srcEdges,tgtPts,0.01,50)
-			#ModifyVertices(srcPath,newPts)
+			#nn = Match(srcPts,tgtPts)
+			newPts, P = NICP(P0,w,srcPts,srcEdges,tgtPts,0.01,50)
+			ModifyVertices(srcPath,newPts)
 			
 # ---- Template code for Maya Plugin Command ---- #
 
