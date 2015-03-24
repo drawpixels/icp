@@ -97,7 +97,7 @@ int Mesh::Closest (const RowVector3d& pt, double* minDist) const {
 // For each point in source, find the closest point in the target. 
 // Return the closest points in array
 //
-const MatrixX3d Mesh::Match (const Mesh& target) const {
+Mesh Mesh::Match (const Mesh& target) const {
 	int nLen = NumVertices();
 	int idx;
 	char sInfo[100];
@@ -105,9 +105,10 @@ const MatrixX3d Mesh::Match (const Mesh& target) const {
 	for (int i=0; i<nLen; i++) {
 		idx = target.Closest(Vertex(i));
 		m.row(i) = target.Vertex(idx);
-		/* DEBUG PRINT */
+		/* DEBUG PRINT *
 		sprintf(sInfo,"%f %f %f",m(i,0),m(i,1),m(i,2));
 		MGlobal::displayInfo(sInfo);
-		/* DEBUG PRINT */
+		* DEBUG PRINT */
 	}
+	return Mesh(m,_Edges);
 }

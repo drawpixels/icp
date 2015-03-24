@@ -22,7 +22,7 @@ public:
 	RowVector3d Vertex (int i) { return _Vertices.row(i); };
 	int KNN (const RowVector3d& pt, int k, int* idx, double* dist) const;
 	int Closest (const RowVector3d& pt, double* minDist=NULL) const;
-	const MatrixX3d Match (const Mesh& target) const;
+	Mesh Match (const Mesh& target) const;
 //	void Match (const Mesh& target, MatrixX3d& matchset) const;
 private:
 	MatrixX3d _Vertices;

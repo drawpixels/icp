@@ -55,11 +55,11 @@ Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k)
 //
 // Deform the mesh using parameters
 //
-void Deformable::Deform (VectorXd& params, MatrixX3d& deformset) {
+Mesh Deformable::Deform (VectorXd& params) {
 	char sInfo[5000];
 
 	int nLen = NumVertices();
-	deformset = MatrixXd::Zero(nLen,3);
+	MatrixX3d deformset = MatrixXd::Zero(nLen,3);
 
 	Matrix3d A;
 	RowVector3d b;
@@ -80,25 +80,26 @@ void Deformable::Deform (VectorXd& params, MatrixX3d& deformset) {
 				* DEBUG PRINT */
 				/* DEBUG PRINT *
 				if (i<5) {
-					sprintf(sInfo,"%d(%f,%f,%f) %d(%f,%f,%f)",i,dataset(i,0),dataset(i,1),dataset(i,2),j,dataset(j,0),dataset(j,1),dataset(j,2));
-					MGlobal::displayInfo(sInfo);
-					tmp = dataset.row(i) - dataset.row(j);
-					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
+					sprintf(sInfo,"%d(%f,%f,%f) %d(%f,%f,%f)",i,Vertex(i)(0),Vertex(i)(1),Vertex(i)(2),j,Vertex(j)(0),Vertex(j)(1),Vertex(j)(2));
+					//sprintf(sInfo,"%d(%f,%f,%f) %d(%f,%f,%f)",i,_Vertices(i,0),_Vertices(i,1),_Vertices(i,2),j,_Vertices(j,0),_Vertices(j,1),_Vertices(j,2));
 					MGlobal::displayInfo(sInfo);
 					sprintf(sInfo,"A=(%f,%f,%f %f,%f,%f %f,%f,%f)",
 						A(0,0),A(0,1),A(0,2),A(1,0),A(1,1),A(1,2),A(2,0),A(2,1),A(2,2));
 					MGlobal::displayInfo(sInfo);
-					tmp = tmp * A;
-					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
+					tmp = Vertex(i) - Vertex(j);
+					sprintf(sInfo,"i-j=(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
 					MGlobal::displayInfo(sInfo);
-					tmp = tmp + dataset.row(j);
-					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
+					tmp = tmp * A;
+					sprintf(sInfo,"t*A=(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
+					MGlobal::displayInfo(sInfo);
+					tmp = tmp + Vertex(j);
+					sprintf(sInfo,"t+j=(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
 					MGlobal::displayInfo(sInfo);
 					tmp = tmp + b;
-					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
+					sprintf(sInfo,"t+b=(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
 					MGlobal::displayInfo(sInfo);
 					tmp = tmp * weights(j,i);
-					sprintf(sInfo,"(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
+					sprintf(sInfo,"t*w=(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
 					MGlobal::displayInfo(sInfo);
 					deformset(i,0) += tmp(0);
 					deformset(i,1) += tmp(1);
@@ -117,14 +118,13 @@ void Deformable::Deform (VectorXd& params, MatrixX3d& deformset) {
 			}
 		}
 		/* DEBUG PRINT *
-		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,dataset(i,0),dataset(i,1),dataset(i,2),deformset(i,0),deformset(i,1),deformset(i,2));
+		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,Vertex(i)(0),Vertex(i)(1),Vertex(i)(2),deformset(i,0),deformset(i,1),deformset(i,2));
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
-	}	
+	}
 	//-- Global transformation
 	int nParam = params.rows();
-	Matrix3d Rot;
-	RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4],Rot);
+	Matrix3d Rot = RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4]);
 	RowVector3d Txn = params.segment<3>(nParam-3);
 	MatrixX3d txnset(nLen,3);
 	txnset.col(0) = VectorXd::Constant(nLen,Txn(0));
@@ -145,10 +145,11 @@ void Deformable::Deform (VectorXd& params, MatrixX3d& deformset) {
 	deformset = deformset + txnset;
 	/* DEBUG PRINT *
 	for (int i=0; i<nLen; i++) {
-		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,dataset(i,0),dataset(i,1),dataset(i,2),deformset(i,0),deformset(i,1),deformset(i,2));
+		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,Vertex(i)(0),Vertex(i)(1),Vertex(i)(2),deformset(i,0),deformset(i,1),deformset(i,2));
 		MGlobal::displayInfo(sInfo);
 	}
 	* DEBUG PRINT */
+	return Mesh(deformset,Edges());
 }
 
 //
@@ -164,22 +165,24 @@ void Deformable::PtoAB (VectorXd& params, int i, Matrix3d& A, RowVector3d& b) {
 //
 // Rotational matrix - rotate sequence = X, Y, Z
 //
-void Deformable::RotMatrix (double x, double y, double z, Matrix3d& rot) {
+Matrix3d Deformable::RotMatrix (const double x, const double y, const double z) const {
 	double sx = sin(x);
 	double cx = cos(x);
 	double sy = sin(y);
 	double cy = cos(y);
 	double sz = sin(z);
 	double cz = cos(z);
+	Matrix3d rot;
 	rot << cy*cz, cy*sz, -sy, 
 		sx*sy*cz-cx*sz, sx*sy*sz+cx*cz, 
 		sx*cy, cx*sy*cz+sx*sz, cx*sy*sz-sx*cz, cx*cy; 
+	return rot;
 }
 
 //
 // Partial differentiation of the Rotational matrix - rotate sequence = X, Y, Z
 //
-void Deformable::D_RotMatrix (double x, double y, double z, Matrix3d& drot_dx, Matrix3d& drot_dy, Matrix3d& drot_dz) {
+void Deformable::D_RotMatrix (const double x, const double y, const double z, Matrix3d& drot_dx, Matrix3d& drot_dy, Matrix3d& drot_dz) const {
 	double sx = sin(x);
 	double cx = cos(x);
 	double sy = sin(y);
