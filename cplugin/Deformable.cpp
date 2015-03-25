@@ -14,17 +14,17 @@
 
 
 Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k) 
-: Mesh(v,e), knn(k) {
+: Mesh(v,e), _Knn(k) {
 	char sInfo[500];
 	// Initialise 
 	const int nLen = NumVertices();
 	//-- Calculate weights
-	int idxKnn[knn+2];
-	double distKnn[knn+2];
+	int idxKnn[_Knn+2];
+	double distKnn[_Knn+2];
 	double distSum, distMax, denom;
-	weights = MatrixXd::Zero(nLen,nLen);
+	_Weights = MatrixXd::Zero(nLen,nLen);
 	for (int j=0; j<nLen; j++) {
-		KNN(Vertex(j),knn+2,idxKnn,distKnn);
+		KNN(Vertex(j),_Knn+2,idxKnn,distKnn);
 		/* DEBUG PRINT *
 		cout << j << " " << idxKnn[0] << "," << idxKnn[1] << "," << idxKnn[2] << "," << idxKnn[3] << "," << idxKnn[4] << "," << idxKnn[5] << " "
 			<< distKnn[0] << "," << distKnn[1] << "," << distKnn[2] << "," << distKnn[3] << "," << distKnn[4] << "," << distKnn[5]
@@ -35,12 +35,12 @@ Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k)
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
 		distSum = 0;
-		distMax = distKnn[knn+1];
-		for (int i=1; i<knn+1; i++)
+		distMax = distKnn[_Knn+1];
+		for (int i=1; i<_Knn+1; i++)
 			distSum += distKnn[i];
-		denom = (double)knn - distSum / distMax;
-		for (int i=1; i<knn+1; i++)
-			weights(idxKnn[i],j) = (1 - distKnn[i]/distMax) / denom;
+		denom = (double)_Knn - distSum / distMax;
+		for (int i=1; i<_Knn+1; i++)
+			_Weights(idxKnn[i],j) = (1 - distKnn[i]/distMax) / denom;
 	}
 	/* DEBUG PRINT *
 	for (int i=0; i<10; i++) {
@@ -68,7 +68,7 @@ Mesh Deformable::Deform (const VectorXd& params) const {
 	for (int i=0; i<nLen; i++) {
 		//deformset[i][0] = deformset[i][1] = deformset[i][2] = 0.0;
 		for (int j=0; j<nLen; j++) {
-			if (weights(j,i)!=0) {
+			if (_Weights(j,i)!=0) {
 				Deformable::PtoAB(params,j,A,b);
 				/* DEBUG PRINT *
 				sprintf(sInfo,"(%f,%f,%f %f,%f,%f %f,%f,%f) (%f,%f,%f)",
@@ -110,7 +110,7 @@ Mesh Deformable::Deform (const VectorXd& params) const {
 					tmp = tmp * A;
 					tmp = tmp + Vertex(j);
 					tmp = tmp + b;
-					tmp = tmp * weights(j,i);
+					tmp = tmp * _Weights(j,i);
 					deformset(i,0) += tmp(0);
 					deformset(i,1) += tmp(1);
 					deformset(i,2) += tmp(2);
@@ -199,7 +199,7 @@ void Deformable::D_RotMatrix (const double x, const double y, const double z, Ma
 		cx*cy*cz, cx*cy*sz, -cx*sy;
 	//-- Partial differentiation wrt theta-Z
 	drot_dz << -cy*sz, cy*cz, 0,
-		-sx*sy*sz-cx*cz, sx*sy*cz-cx*sz, 0
+		-sx*sy*sz-cx*cz, sx*sy*cz-cx*sz, 0,
 		-cx*sy*sz+sx*cz, cx*sy*cz+sx*sz, 0;
 }
 
