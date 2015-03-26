@@ -2,13 +2,18 @@
 // nicp_lm_functor.cpp
 //
 
+#include <sstream>
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <maya/MGlobal.h>
 #include <Eigen/Core>
 #include <unsupported/Eigen/NonLinearOptimization>
 #include "mesh.h"
 #include "Deformable.h"
 #include "nicp_lm_functor.h"
 
-nicp_lm_functor::nicp_lm_functor (const Mesh& src, const Mesh& tgt, double f, double r, double s) 
+nicp_lm_functor::nicp_lm_functor (const Deformable& src, const Mesh& tgt, double f, double r, double s) 
  : mSource(src), mTarget(tgt), c_fit(f), c_rigid(r), c_smooth(s) {
 	m_inputs = mSource.NumVertices()*12 + 6;
 	m_values = mSource.NumVertices()*9 + mSource.NumEdges()*6;
@@ -39,7 +44,7 @@ int nicp_lm_functor::operator() (const VectorXd &params, VectorXd &fvec) const
 	Matrix3d A;
 	RowVector3d b;
 	RowVector3d a0, a1, a2;
-	for (int i; i<nVertices; i++) {
+	for (int i=0; i<nVertices; i++) {
 		Deformable::PtoAB(params,i,A,b);
 		a0 = A.row(0);
 		a1 = A.row(1);
@@ -72,7 +77,18 @@ int nicp_lm_functor::operator() (const VectorXd &params, VectorXd &fvec) const
 		fvec(idx++) = s1(1) * c_smooth;
 		fvec(idx++) = s1(2) * c_smooth;
 	}
-    return 0;
+	/* DEBUG PRINT *
+	char sInfo[500];
+	sprintf(sInfo,"fvec=%ld count=%d (%d,%d)",fvec.rows(),idx,nVertices,nEdges);
+	MGlobal::displayInfo(sInfo);
+	for (int i=0,j=0; i<(idx/10) && i<5; i++,j+=10) {
+		sprintf(sInfo,"%4d: %f %f %f %f %f %f %f %f %f %f",
+			j,fvec(j),fvec(j+1),fvec(j+2),fvec(j+3),fvec(j+4),
+			fvec(j+5),fvec(j+6),fvec(j+7),fvec(j+8),fvec(j+9));
+		MGlobal::displayInfo(sInfo);
+	}
+	* DEBUG PRINT */
+	return 0;
 }
 
 // x = (in) parameters, fjac = (out) jacobian (15x3 matrix)
@@ -111,13 +127,13 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 				fjac.block<3,1>(idx,j*12+10) = c_fit * -W(j,i) * R1;
 				fjac.block<3,1>(idx,j*12+11) = c_fit * -W(j,i) * R2;
 			}
-			fjac.block<3,1>(idx,nParams-6) = c_fit * -DD.Vertex(i) * dRx;
-			fjac.block<3,1>(idx,nParams-5) = c_fit * -DD.Vertex(i) * dRy;
-			fjac.block<3,1>(idx,nParams-4) = c_fit * -DD.Vertex(i) * dRz;
-			fjac.block<3,1>(idx,nParams-3) = Vector3d(-c_fit, 0, 0);
-			fjac.block<3,1>(idx,nParams-2) = Vector3d(0, -c_fit, 0);
-			fjac.block<3,1>(idx,nParams-1) = Vector3d(0, 0, -c_fit);
 		}
+		fjac.block<3,1>(idx,nParams-6) = c_fit * -DD.Vertex(i) * dRx;
+		fjac.block<3,1>(idx,nParams-5) = c_fit * -DD.Vertex(i) * dRy;
+		fjac.block<3,1>(idx,nParams-4) = c_fit * -DD.Vertex(i) * dRz;
+		fjac.block<3,1>(idx,nParams-3) = Vector3d(-c_fit, 0, 0);
+		fjac.block<3,1>(idx,nParams-2) = Vector3d(0, -c_fit, 0);
+		fjac.block<3,1>(idx,nParams-1) = Vector3d(0, 0, -c_fit);
 		idx += 3;
 	}
 	// E-rigid 

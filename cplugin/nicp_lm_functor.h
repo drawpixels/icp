@@ -42,7 +42,7 @@ struct nicp_lm_functor : Functor<double>
 	Mesh mTarget;
 	double c_fit, c_rigid, c_smooth;
 	
-	nicp_lm_functor (const Mesh& src, const Mesh& tgt, double f=1.0, double r=1.0, double s=1.0);
+	nicp_lm_functor (const Deformable& src, const Mesh& tgt, double f=1.0, double r=1.0, double s=1.0);
 	void SetCoeff (double f, double r, double s);
     int operator() (const VectorXd &x, VectorXd &fvec) const;
     int df (const VectorXd &x, MatrixXd &fjac) const;

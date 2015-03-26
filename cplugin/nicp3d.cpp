@@ -41,7 +41,7 @@ private:
 	int GetModels (MDagPath& dag1, MDagPath& dag2);
 	Mesh GetMesh (const MDagPath dag);
 	VectorXd Initialise (const Mesh& m);
-	void NICP (const Deformable& src, const Mesh& tgt, VectorXd params, double tol=0.001, int runs=100);
+	void NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, double tol=0.001, int runs=100);
 	void ModifyVertices (MDagPath path, const Mesh& m);
 };
 
@@ -67,7 +67,20 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 	MGlobal::displayInfo(sInfo);
 
 	VectorXd params = Initialise (mSrc);
-	NICP(mSrc,mTgt,params,0.01,10);
+	NICP(mSrc,mTgt,params,0.01,5);
+	/* DEBUG PRINT */
+	int i,j;
+	for (i=0,j=0; i<params.rows()/10; i++,j+=10) {
+		sprintf(sInfo, "%4d %f,%f,%f,%f,%f,%f,%f,%f,%f,%f", 
+			i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),
+			params(j+5),params(j+6),params(j+7),params(j+8),params(j+9));
+		MGlobal::displayInfo(sInfo);
+	}
+	sprintf(sInfo,"%4d",i);
+	for ( ; j<params.rows(); j++) 
+		sprintf(sInfo,"%s %f",sInfo,params(j));
+	MGlobal::displayInfo(sInfo);
+	/* DEBUG PRINT */
 
 	Mesh DD = mSrc.Deform(params);
 	ModifyVertices(dagSrc,DD);
@@ -134,29 +147,41 @@ VectorXd nicp3d::Initialise (const Mesh& m) {
 	return p;
 }
 
-void nicp3d::NICP (const Deformable& src, const Mesh& tgt, VectorXd params, double tol, int runs) {
+void nicp3d::NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, double tol, int runs) {
 	char sInfo[500];
 	double e, err = 1000000.0;
-	for (int i=0; i<runs; i++) {
+	double c_fit = INIT_C_FIT;
+	double c_rigid = INIT_C_RIGID;
+	double c_smooth = INIT_C_SMOOTH;
+	for (int r=0; r<runs; r++) {
 		e = err;
 		Mesh DD = src.Deform(params);
 		Mesh NN = DD.Match(tgt);
-		nicp_lm_functor functor(src,NN,INIT_C_FIT,INIT_C_RIGID,INIT_C_SMOOTH);
+		nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
 		LevenbergMarquardt<nicp_lm_functor> lm(functor);
 		int info = lm.lmder1(params);
-		// End if fail to optimise 
-		if (info!=1)
-			break;
 		err = lm.fvec.norm();
-		sprintf(sInfo,"%3d,%f",i,err);
+		sprintf(sInfo,"%3d: %f",r,err);
 		MGlobal::displayInfo(sInfo);
 		/* DEBUG PRINT */
-		sprintf(sInfo,"info=%d,iter=%ld,nfev=%ld,njev=%ld fvec=%f %f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f",
-			info,lm.iter,lm.nfev,lm.njev,lm.fvec.norm(),params(0),params(1),params(2),params(3),params(4),params(5),
-			params(6),params(7),params(8),params(9),params(10),params(11));
+		sprintf(sInfo,"info=%d,iter=%ld,nfev=%ld,njev=%ld fvec=%f",
+			info,lm.iter,lm.nfev,lm.njev,lm.fvec.norm());
 		MGlobal::displayInfo(sInfo);
 		/* DEBUG PRINT */
 	}
+	/* DEBUG PRINT *
+	int i,j;
+	for (i=0,j=0; i<params.rows()/10; i++,j+=10) {
+		sprintf(sInfo, "%4d %f,%f,%f,%f,%f,%f,%f,%f,%f,%f", 
+			i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),
+			params(j+5),params(j+6),params(j+7),params(j+8),params(j+9));
+		MGlobal::displayInfo(sInfo);
+	}
+	sprintf(sInfo,"%4d ",i);
+	for ( ; j<params.rows(); j++) 
+		sprintf(sInfo,"%s %f",sInfo,params(j));
+	MGlobal::displayInfo(sInfo);
+	* DEBUG PRINT */
 }
 
 
