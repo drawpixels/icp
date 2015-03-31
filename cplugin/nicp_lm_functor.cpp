@@ -100,15 +100,15 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 
 	int idx=0;	//-- Running index to fill up the output values
 	//-- E-fit
-	Mesh DD = mSource.Deform(params);
+	Mesh DL = mSource.Deform_L(params);
 	MatrixXd W = mSource.Weights();
 	Matrix3d R = Deformable::RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4));
 	RowVector3d R0 = R.row(0);
 	RowVector3d R1 = R.row(1);
 	RowVector3d R2 = R.row(2);
 
-	Matrix3d dRx, dRy, dRz;
-	Deformable::D_RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4),dRx,dRy,dRz);
+	Matrix3d Rdx, Rdy, Rdz;
+	Deformable::D_RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4),Rdx,Rdy,Rdz);
 	RowVector3d disp;
 	for (int i=0; i<nVertices; i++) {
 		for (int j=0; j<nVertices; j++) {
@@ -128,12 +128,15 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 				fjac.block<3,1>(idx,j*12+11) = c_fit * -W(j,i) * R2;
 			}
 		}
-		fjac.block<3,1>(idx,nParams-6) = c_fit * -DD.Vertex(i) * dRx;
-		fjac.block<3,1>(idx,nParams-5) = c_fit * -DD.Vertex(i) * dRy;
-		fjac.block<3,1>(idx,nParams-4) = c_fit * -DD.Vertex(i) * dRz;
-		fjac.block<3,1>(idx,nParams-3) = Vector3d(-c_fit, 0, 0);
-		fjac.block<3,1>(idx,nParams-2) = Vector3d(0, -c_fit, 0);
-		fjac.block<3,1>(idx,nParams-1) = Vector3d(0, 0, -c_fit);
+		fjac.block<3,1>(idx,nParams-6) = c_fit * -DL.Vertex(i) * Rdx;
+		fjac.block<3,1>(idx,nParams-5) = c_fit * -DL.Vertex(i) * Rdy;
+		fjac.block<3,1>(idx,nParams-4) = c_fit * -DL.Vertex(i) * Rdz;
+		//fjac.block<3,1>(idx,nParams-3) = Vector3d(-c_fit, 0, 0);
+		//fjac.block<3,1>(idx,nParams-2) = Vector3d(0, -c_fit, 0);
+		//fjac.block<3,1>(idx,nParams-1) = Vector3d(0, 0, -c_fit);
+		fjac.block<3,1>(idx,nParams-3) = Vector3d(-1, 0, 0);
+		fjac.block<3,1>(idx,nParams-2) = Vector3d(0, -1, 0);
+		fjac.block<3,1>(idx,nParams-1) = Vector3d(0, 0, -1);
 		idx += 3;
 	}
 	// E-rigid 

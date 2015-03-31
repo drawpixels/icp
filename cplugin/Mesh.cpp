@@ -106,8 +106,10 @@ Mesh Mesh::Match (const Mesh& target) const {
 		idx = target.Closest(Vertex(i));
 		m.row(i) = target.Vertex(idx);
 		/* DEBUG PRINT *
-		sprintf(sInfo,"%f %f %f",m(i,0),m(i,1),m(i,2));
-		MGlobal::displayInfo(sInfo);
+		if (i<10) {
+			sprintf(sInfo,"%f %f %f",m(i,0),m(i,1),m(i,2));
+			MGlobal::displayInfo(sInfo);
+		}
 		* DEBUG PRINT */
 	}
 	return Mesh(m,_Edges);

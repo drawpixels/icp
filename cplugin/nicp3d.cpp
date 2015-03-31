@@ -24,8 +24,8 @@
 #include "Deformable.h"
 #include "nicp_lm_functor.h"
 
-#define INIT_C_FIT 0.1
-#define INIT_C_RIGID 100.0
+#define INIT_C_FIT 5.0
+#define INIT_C_RIGID 50.0
 #define INIT_C_SMOOTH 10.0
 
 using namespace std;
@@ -38,21 +38,21 @@ public:
 	static void* creator ();
 private:
 	VectorXd params;
-	int GetModels (MDagPath& dag1, MDagPath& dag2);
+	int GetModels (MDagPath& dag1, MDagPath& dag2, MDagPath& dag3);
 	Mesh GetMesh (const MDagPath dag);
 	VectorXd Initialise (const Mesh& m);
-	void NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, double tol=0.001, int runs=100);
+	Mesh NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, double tol=0.001, int runs=100);
 	void ModifyVertices (MDagPath path, const Mesh& m);
 };
 
 void* nicp3d::creator () { return new nicp3d; }
  
 MStatus nicp3d::doIt (const MArgList& argList) {
-	MDagPath dagSrc, dagTgt;
+	MDagPath dagSrc, dagS2, dagTgt;
 	char sInfo[500];
-	int n = GetModels(dagSrc,dagTgt);
-	if (n!=2) {
-		MGlobal::displayInfo("2 models must be selected.");
+	int n = GetModels(dagSrc,dagS2,dagTgt);
+	if (n!=3) {
+		MGlobal::displayInfo("3 models must be selected.");
 		return MS::kFailure;
 	}
 	if (!dagSrc.hasFn(MFn::kMesh) || !dagTgt.hasFn(MFn::kMesh)) {
@@ -67,23 +67,21 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 	MGlobal::displayInfo(sInfo);
 
 	VectorXd params = Initialise (mSrc);
-	NICP(mSrc,mTgt,params,0.01,5);
+	Mesh NN = NICP(mSrc,mTgt,params,0.01,20);
 	/* DEBUG PRINT */
 	int i,j;
-	for (i=0,j=0; i<params.rows()/10; i++,j+=10) {
-		sprintf(sInfo, "%4d %f,%f,%f,%f,%f,%f,%f,%f,%f,%f", 
-			i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),
-			params(j+5),params(j+6),params(j+7),params(j+8),params(j+9));
+	for (i=0,j=0; i<params.rows()/12; i++,j+=12) {
+		sprintf(sInfo, "%4d [%f,%f,%f %f,%f,%f %f,%f,%f] [%f,%f,%f]", 
+			i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5),
+			params(j+6),params(j+7),params(j+8),params(j+9),params(j+10),params(j+11));
 		MGlobal::displayInfo(sInfo);
 	}
-	sprintf(sInfo,"%4d",i);
-	for ( ; j<params.rows(); j++) 
-		sprintf(sInfo,"%s %f",sInfo,params(j));
+	sprintf(sInfo,"G (%f %f %f) (%f %f %f)",params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5));
 	MGlobal::displayInfo(sInfo);
 	/* DEBUG PRINT */
-
 	Mesh DD = mSrc.Deform(params);
 	ModifyVertices(dagSrc,DD);
+	ModifyVertices(dagS2,NN);
 	
 	return MS::kSuccess;
 }
@@ -91,12 +89,13 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 //
 // Return the selected models - must select TWO models SRC & TGT
 //
-int nicp3d::GetModels (MDagPath& dag0, MDagPath& dag1) {
+int nicp3d::GetModels (MDagPath& dag0, MDagPath& dag1, MDagPath& dag2) {
 	MSelectionList list;
 	MGlobal::getActiveSelectionList(list);
-	if (list.length()>=2) {
+	if (list.length()>=3) {
 		list.getDagPath(0,dag0);
 		list.getDagPath(1,dag1);
+		list.getDagPath(2,dag2);
 	}
 	return list.length();
 }
@@ -147,27 +146,43 @@ VectorXd nicp3d::Initialise (const Mesh& m) {
 	return p;
 }
 
-void nicp3d::NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, double tol, int runs) {
+Mesh nicp3d::NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, double tol, int runs) {
 	char sInfo[500];
+	int n = params.rows();
 	double e, err = 1000000.0;
 	double c_fit = INIT_C_FIT;
 	double c_rigid = INIT_C_RIGID;
 	double c_smooth = INIT_C_SMOOTH;
+	Mesh DD, NN;
+	int info;
 	for (int r=0; r<runs; r++) {
 		e = err;
-		Mesh DD = src.Deform(params);
-		Mesh NN = DD.Match(tgt);
+		DD = src.Deform(params);
+		NN = DD.Match(tgt);
 		nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
-		LevenbergMarquardt<nicp_lm_functor> lm(functor);
-		int info = lm.lmder1(params);
-		err = lm.fvec.norm();
-		sprintf(sInfo,"%3d: %f",r,err);
+		//LevenbergMarquardt<nicp_lm_functor> lm(functor);
+		//info = lm.lmder1(params);
+		//err = lm.fvec.norm();
+		DenseIndex nfev;
+		VectorXd fvec(functor.values());
+		info = LevenbergMarquardt<nicp_lm_functor>::lmdif1(functor,params,&nfev);
+		functor(params,fvec);
+		err = fvec.norm();
+		sprintf(sInfo,"%3d: %f [%f,%f,%f]",r,err,c_fit,c_rigid,c_smooth);
 		MGlobal::displayInfo(sInfo);
-		/* DEBUG PRINT */
+		//sprintf(sInfo,"[%f,%f,%f] [%f,%f,%f]", params(n-6),params(n-5),params(n-4),params(n-3),params(n-2),params(n-1));
+		//MGlobal::displayInfo(sInfo);
+		/* DEBUG PRINT *
 		sprintf(sInfo,"info=%d,iter=%ld,nfev=%ld,njev=%ld fvec=%f",
 			info,lm.iter,lm.nfev,lm.njev,lm.fvec.norm());
 		MGlobal::displayInfo(sInfo);
-		/* DEBUG PRINT */
+		* DEBUG PRINT */
+		if ((e-err)<tol) {
+			c_rigid /= 2.0;
+			c_smooth /= 2.0;
+			if ((c_rigid<0.1)||(c_smooth<0.1))
+				break;
+		}
 	}
 	/* DEBUG PRINT *
 	int i,j;
@@ -182,6 +197,7 @@ void nicp3d::NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, dou
 		sprintf(sInfo,"%s %f",sInfo,params(j));
 	MGlobal::displayInfo(sInfo);
 	* DEBUG PRINT */
+	return NN;
 }
 
 

@@ -29,7 +29,7 @@ Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k)
 		cout << j << " " << idxKnn[0] << "," << idxKnn[1] << "," << idxKnn[2] << "," << idxKnn[3] << "," << idxKnn[4] << "," << idxKnn[5] << " "
 			<< distKnn[0] << "," << distKnn[1] << "," << distKnn[2] << "," << distKnn[3] << "," << distKnn[4] << "," << distKnn[5]
 			<< endl;
-		sprintf(sInfo,"%2d: %2d %2d %2d %2d %2d %2d %f %f %f %f %f %f\n",j,
+		sprintf(sInfo,"%2d: %2d %2d %2d %2d %2d %2d %f %f %f %f %f %f",j,
 			idxKnn[0],idxKnn[1],idxKnn[2],idxKnn[3],idxKnn[4],idxKnn[5],
 			distKnn[0],distKnn[1],distKnn[2],distKnn[3],distKnn[4],distKnn[5]);
 		MGlobal::displayInfo(sInfo);
@@ -53,10 +53,10 @@ Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k)
 }
 
 //
-// Deform the mesh using parameters
+// Deform the mesh using parameters - Local deformation only, NO global rotation & translation
 //
-Mesh Deformable::Deform (const VectorXd& params) const {
-	char sInfo[5000];
+Mesh Deformable::Deform_L (const VectorXd& params) const {
+	char sInfo[500];
 
 	int nLen = NumVertices();
 	MatrixX3d deformset = MatrixXd::Zero(nLen,3);
@@ -122,7 +122,19 @@ Mesh Deformable::Deform (const VectorXd& params) const {
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
 	}
+	return Mesh(deformset,Edges());
+}
+
+//
+// Deform the mesh using parameters - Local deformation AND Global rotation and translation
+//
+Mesh Deformable::Deform (const VectorXd& params) const {
+	char sInfo[500];
+
+	Mesh DD = Deform_L(params);
+	MatrixX3d deformset = DD.Vertices();
 	//-- Global transformation
+	int nLen = NumVertices();
 	int nParam = params.rows();
 	Matrix3d Rot = Deformable::RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4]);
 	RowVector3d Txn = params.segment<3>(nParam-3);
@@ -130,17 +142,6 @@ Mesh Deformable::Deform (const VectorXd& params) const {
 	txnset.col(0) = VectorXd::Constant(nLen,Txn(0));
 	txnset.col(1) = VectorXd::Constant(nLen,Txn(1));
 	txnset.col(2) = VectorXd::Constant(nLen,Txn(2));
-
-	//--
-	//-- Printing content of Rot will reset it to Zero. ????????
-	//--
-	/* DEBUG PRRINT *
-	sprintf(sInfo,"R=(%f,%f,%f %f,%f,%f %f,%f,%f) T=(%f,%f,%f)",
-		Rot(0,0),Rot(0,1),Rot(0,2), Rot(1,0),Rot(1,1),Rot(1,2), Rot(2,0),Rot(2,1),Rot(2,2),
-		Txn(0),Txn(1),Txn(2));
-	MGlobal::displayInfo(sInfo);
-	* DEBUG PRINT */
-	
 	deformset = deformset * Rot;
 	deformset = deformset + txnset;
 	/* DEBUG PRINT *
@@ -174,8 +175,8 @@ Matrix3d Deformable::RotMatrix (const double x, const double y, const double z) 
 	double cz = cos(z);
 	Matrix3d rot;
 	rot << cy*cz, cy*sz, -sy, 
-		sx*sy*cz-cx*sz, sx*sy*sz+cx*cz, 
-		sx*cy, cx*sy*cz+sx*sz, cx*sy*sz-sx*cz, cx*cy; 
+		sx*sy*cz-cx*sz, sx*sy*sz+cx*cz, sx*cy, 
+		cx*sy*cz+sx*sz, cx*sy*sz-sx*cz, cx*cy; 
 	return rot;
 }
 

@@ -20,6 +20,7 @@ public:
 	Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k=DEF_KNN);
 	Deformable (const Mesh& m) : Deformable (m.Vertices(), m.Edges()) {};
 	// Main functions
+	Mesh Deform_L (const VectorXd& params) const;
 	Mesh Deform (const VectorXd& params) const;
 	// Supporting functions 
 	const MatrixXd& Weights() const { return _Weights; };
