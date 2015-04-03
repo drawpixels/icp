@@ -53,9 +53,9 @@ Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k)
 }
 
 //
-// Deform the mesh using parameters - Local deformation only, NO global rotation & translation
+// Deform the mesh using parameters - Local deformation OR Local and Global rotation and translation
 //
-Mesh Deformable::Deform_L (const VectorXd& params) const {
+Mesh Deformable::Deform (const VectorXd& params, const bool local) const {
 	char sInfo[500];
 
 	int nLen = NumVertices();
@@ -81,10 +81,8 @@ Mesh Deformable::Deform_L (const VectorXd& params) const {
 				/* DEBUG PRINT *
 				if (i<5) {
 					sprintf(sInfo,"%d(%f,%f,%f) %d(%f,%f,%f)",i,Vertex(i)(0),Vertex(i)(1),Vertex(i)(2),j,Vertex(j)(0),Vertex(j)(1),Vertex(j)(2));
-					//sprintf(sInfo,"%d(%f,%f,%f) %d(%f,%f,%f)",i,_Vertices(i,0),_Vertices(i,1),_Vertices(i,2),j,_Vertices(j,0),_Vertices(j,1),_Vertices(j,2));
 					MGlobal::displayInfo(sInfo);
-					sprintf(sInfo,"A=(%f,%f,%f %f,%f,%f %f,%f,%f)",
-						A(0,0),A(0,1),A(0,2),A(1,0),A(1,1),A(1,2),A(2,0),A(2,1),A(2,2));
+					sprintf(sInfo,"A=(%f,%f,%f %f,%f,%f %f,%f,%f)",A(0,0),A(0,1),A(0,2),A(1,0),A(1,1),A(1,2),A(2,0),A(2,1),A(2,2));
 					MGlobal::displayInfo(sInfo);
 					tmp = Vertex(i) - Vertex(j);
 					sprintf(sInfo,"i-j=(%f,%f,%f)",tmp(0),tmp(1),tmp(2));
@@ -122,19 +120,10 @@ Mesh Deformable::Deform_L (const VectorXd& params) const {
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
 	}
-	return Mesh(deformset,Edges());
-}
+	if (local)
+		return Mesh(deformset,Edges());
 
-//
-// Deform the mesh using parameters - Local deformation AND Global rotation and translation
-//
-Mesh Deformable::Deform (const VectorXd& params) const {
-	char sInfo[500];
-
-	Mesh DD = Deform_L(params);
-	MatrixX3d deformset = DD.Vertices();
 	//-- Global transformation
-	int nLen = NumVertices();
 	int nParam = params.rows();
 	Matrix3d Rot = Deformable::RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4]);
 	RowVector3d Txn = params.segment<3>(nParam-3);

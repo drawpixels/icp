@@ -34,8 +34,9 @@ int nicp_lm_functor::operator() (const VectorXd &params, VectorXd &fvec) const
 	int idx=0;	//-- Running index to fill up the output values
 	//-- E-fit
 	Mesh DD = mSource.Deform(params);
+	RowVector3d delta;
 	for (int i=0; i<nVertices; i++) {
-		RowVector3d delta = mTarget.Vertex(i) - DD.Vertex(i);
+		delta = mTarget.Vertex(i) - DD.Vertex(i);
 		fvec(idx++) = delta(0) * c_fit;
 		fvec(idx++) = delta(1) * c_fit;
 		fvec(idx++) = delta(2) * c_fit;
@@ -100,43 +101,34 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 
 	int idx=0;	//-- Running index to fill up the output values
 	//-- E-fit
-	Mesh DL = mSource.Deform_L(params);
-	MatrixXd W = mSource.Weights();
-	Matrix3d R = Deformable::RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4));
-	RowVector3d R0 = R.row(0);
-	RowVector3d R1 = R.row(1);
-	RowVector3d R2 = R.row(2);
-
-	Matrix3d Rdx, Rdy, Rdz;
-	Deformable::D_RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4),Rdx,Rdy,Rdz);
-	RowVector3d disp;
+	MatrixXd w = mSource.Weights();
+	Mesh DL = mSource.Deform(params,true);
+	RowVector3d delta;
+	Matrix3d rot, drot_dx, drot_dy, drot_dz;
+	rot = Deformable::RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4));
+	Deformable::D_RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4),drot_dx,drot_dy,drot_dz);
 	for (int i=0; i<nVertices; i++) {
 		for (int j=0; j<nVertices; j++) {
-			if (W(j,i)!=0) {
-				disp = -W(j,i) * (mSource.Vertex(i) - mSource.Vertex(j));
-				fjac.block<3,1>(idx,j*12)    = c_fit * disp(0) * R0;
-				fjac.block<3,1>(idx,j*12+1)  = c_fit * disp(0) * R1;
-				fjac.block<3,1>(idx,j*12+2)  = c_fit * disp(0) * R2;
-				fjac.block<3,1>(idx,j*12+3)  = c_fit * disp(1) * R0;
-				fjac.block<3,1>(idx,j*12+4)  = c_fit * disp(1) * R1;
-				fjac.block<3,1>(idx,j*12+5)  = c_fit * disp(1) * R1;
-				fjac.block<3,1>(idx,j*12+6)  = c_fit * disp(2) * R0;
-				fjac.block<3,1>(idx,j*12+7)  = c_fit * disp(2) * R1;
-				fjac.block<3,1>(idx,j*12+8)  = c_fit * disp(2) * R2;
-				fjac.block<3,1>(idx,j*12+9)  = c_fit * -W(j,i) * R0;
-				fjac.block<3,1>(idx,j*12+10) = c_fit * -W(j,i) * R1;
-				fjac.block<3,1>(idx,j*12+11) = c_fit * -W(j,i) * R2;
+			if (w(j,i)!=0) {
+				delta = mSource.Vertex(i) - mSource.Vertex(j);
+				fjac.block<3,1>(idx,j*12)    = -c_fit * w(j,i) * delta(0) * rot.row(0);
+				fjac.block<3,1>(idx,j*12+1)  = -c_fit * w(j,i) * delta(0) * rot.row(1);
+				fjac.block<3,1>(idx,j*12+2)  = -c_fit * w(j,i) * delta(0) * rot.row(2);
+				fjac.block<3,1>(idx,j*12+3)  = -c_fit * w(j,i) * delta(1) * rot.row(0);
+				fjac.block<3,1>(idx,j*12+4)  = -c_fit * w(j,i) * delta(1) * rot.row(1);
+				fjac.block<3,1>(idx,j*12+5)  = -c_fit * w(j,i) * delta(1) * rot.row(2);
+				fjac.block<3,1>(idx,j*12+6)  = -c_fit * w(j,i) * delta(2) * rot.row(0);
+				fjac.block<3,1>(idx,j*12+7)  = -c_fit * w(j,i) * delta(2) * rot.row(1);
+				fjac.block<3,1>(idx,j*12+8)  = -c_fit * w(j,i) * delta(2) * rot.row(2);
+				fjac.block<3,1>(idx,j*12+9)  = -c_fit * w(j,i) * rot.row(0);
+				fjac.block<3,1>(idx,j*12+10) = -c_fit * w(j,i) * rot.row(1);
+				fjac.block<3,1>(idx,j*12+11) = -c_fit * w(j,i) * rot.row(2);
 			}
 		}
-		fjac.block<3,1>(idx,nParams-6) = c_fit * -DL.Vertex(i) * Rdx;
-		fjac.block<3,1>(idx,nParams-5) = c_fit * -DL.Vertex(i) * Rdy;
-		fjac.block<3,1>(idx,nParams-4) = c_fit * -DL.Vertex(i) * Rdz;
-		//fjac.block<3,1>(idx,nParams-3) = Vector3d(-c_fit, 0, 0);
-		//fjac.block<3,1>(idx,nParams-2) = Vector3d(0, -c_fit, 0);
-		//fjac.block<3,1>(idx,nParams-1) = Vector3d(0, 0, -c_fit);
-		fjac.block<3,1>(idx,nParams-3) = Vector3d(-1, 0, 0);
-		fjac.block<3,1>(idx,nParams-2) = Vector3d(0, -1, 0);
-		fjac.block<3,1>(idx,nParams-1) = Vector3d(0, 0, -1);
+		fjac.block<3,1>(idx,nParams-6) = -c_fit * DL.Vertex(i) * drot_dx;
+		fjac.block<3,1>(idx,nParams-5) = -c_fit * DL.Vertex(i) * drot_dy;
+		fjac.block<3,1>(idx,nParams-4) = -c_fit * DL.Vertex(i) * drot_dz;
+		fjac.block<3,3>(idx,nParams-3) << -c_fit,0,0,  0,-c_fit,0,  0,0,c_fit;
 		idx += 3;
 	}
 	// E-rigid 
@@ -144,42 +136,38 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 	RowVector3d b;
 	for (int i=0; i<nVertices; i++) {
 		Deformable::PtoAB(params,i,A,b);
-		fjac.block<6,9>(idx,i*12) = c_rigid * ( Matrix<double,6,9>() << 
+		fjac.block<6,9>(idx,i*12) = c_rigid * (MatrixXd(6,9) <<
 			A(1,0),A(1,1),A(1,2),  A(0,0),A(0,1),A(0,2),  0,0,0,
 			0,0,0,  A(2,0),A(2,1),A(2,2),  A(1,0),A(1,1),A(1,2),
 			A(2,0),A(2,1),A(2,2),  0,0,0,  A(0,0),A(0,1),A(0,2),
 			-2*A(0,0),-2*A(0,1),-2*A(0,2),  0,0,0,  0,0,0,
 			0,0,0,  -2*A(1,0),-2*A(1,1),-2*A(1,2),  0,0,0,
-			0,0,0,  0,0,0,  -2*A(2,0),-2*A(2,1),-2*A(2,2) ).finished();
+			0,0,0,  0,0,0,  -2*A(2,0),-2*A(2,1),-2*A(2,2)).finished();
 		idx += 6;
 	}
 	// E-smooth
 	int i0, i1;
-	for (int i=0; i<nVertices; i++) {
+	RowVector3d disp;
+	for (int i=0; i<nEdges; i++) {
 		i0 = mSource.Edge(i)(0);
 		i1 = mSource.Edge(i)(1);
 		disp = mSource.Vertex(i0) - mSource.Vertex(i1);
-
-		fjac.block<3,12>(idx,i0*12) = c_smooth * ( Matrix<double,3,12>() <<
+		fjac.block<3,12>(idx,i0*12) = c_smooth * (MatrixXd(3,12) << 
 			disp(0),0,0,  disp(1),0,0,  disp(2),0,0,  1,0,0,
 			0,disp(0),0,  0,disp(1),0,  0,disp(2),0,  0,1,0,
-			0,0,disp(0),  0,0,disp(1),  0,0,disp(2),  0,0,1 ).finished();
-		fjac.block<3,3>(idx,i1*12+9) <<
-			-c_smooth, 0, 0,
-			0, -c_smooth, 0,
-			0, 0, -c_smooth;
+			0,0,disp(0),  0,0,disp(1),  0,0,disp(2),  0,0,1).finished();
+		fjac.block<3,3>(idx,i1*12) = c_smooth * (MatrixXd(3,3) << 
+			-1,0,0,  0,-1,0,  0,0,-1).finished();
 		idx += 3;
-
-		fjac.block<3,12>(idx,i1*12) = c_smooth * ( Matrix<double,3,12>() <<
+		fjac.block<3,12>(idx,i1*12) = c_smooth * (MatrixXd(3,12) << 
 			-disp(0),0,0,  -disp(1),0,0,  -disp(2),0,0,  1,0,0,
 			0,-disp(0),0,  0,-disp(1),0,  0,-disp(2),0,  0,1,0,
-			0,0,-disp(0),  0,0,-disp(1),  0,0,-disp(2),  0,0,1 ).finished();
-		fjac.block<3,3>(idx,i0*12+9) <<
-			-c_smooth, 0, 0,
-			0, -c_smooth, 0,
-			0, 0, -c_smooth;
+			0,0,-disp(0),  0,0,-disp(1),  0,0,-disp(2),  0,0,1).finished();
+		fjac.block<3,3>(idx,i0*12) = c_smooth * (MatrixXd(3,3) << 
+			-1,0,0,  0,-1,0,  0,0,-1).finished();
 		idx += 3;
 	}
+
     return 0;
 }
 
