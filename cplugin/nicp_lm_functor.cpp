@@ -101,28 +101,41 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 
 	int idx=0;	//-- Running index to fill up the output values
 	//-- E-fit
-	MatrixXd w = mSource.Weights();
 	Mesh DL = mSource.Deform(params,true);
+	double w;
 	RowVector3d delta;
 	Matrix3d rot, drot_dx, drot_dy, drot_dz;
 	rot = Deformable::RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4));
 	Deformable::D_RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4),drot_dx,drot_dy,drot_dz);
 	for (int i=0; i<nVertices; i++) {
 		for (int j=0; j<nVertices; j++) {
-			if (w(j,i)!=0) {
+			w = mSource.Weights()(j,i);
+			if (w!=0) {
 				delta = mSource.Vertex(i) - mSource.Vertex(j);
-				fjac.block<3,1>(idx,j*12)    = -c_fit * w(j,i) * delta(0) * rot.row(0);
-				fjac.block<3,1>(idx,j*12+1)  = -c_fit * w(j,i) * delta(0) * rot.row(1);
-				fjac.block<3,1>(idx,j*12+2)  = -c_fit * w(j,i) * delta(0) * rot.row(2);
-				fjac.block<3,1>(idx,j*12+3)  = -c_fit * w(j,i) * delta(1) * rot.row(0);
-				fjac.block<3,1>(idx,j*12+4)  = -c_fit * w(j,i) * delta(1) * rot.row(1);
-				fjac.block<3,1>(idx,j*12+5)  = -c_fit * w(j,i) * delta(1) * rot.row(2);
-				fjac.block<3,1>(idx,j*12+6)  = -c_fit * w(j,i) * delta(2) * rot.row(0);
-				fjac.block<3,1>(idx,j*12+7)  = -c_fit * w(j,i) * delta(2) * rot.row(1);
-				fjac.block<3,1>(idx,j*12+8)  = -c_fit * w(j,i) * delta(2) * rot.row(2);
-				fjac.block<3,1>(idx,j*12+9)  = -c_fit * w(j,i) * rot.row(0);
-				fjac.block<3,1>(idx,j*12+10) = -c_fit * w(j,i) * rot.row(1);
-				fjac.block<3,1>(idx,j*12+11) = -c_fit * w(j,i) * rot.row(2);
+				//fjac.block<3,1>(idx,j*12)    = -c_fit * w * delta(0) * rot.row(0);
+				//fjac.block<3,1>(idx,j*12+1)  = -c_fit * w * delta(0) * rot.row(1);
+				//fjac.block<3,1>(idx,j*12+2)  = -c_fit * w * delta(0) * rot.row(2);
+				//fjac.block<3,1>(idx,j*12+3)  = -c_fit * w * delta(1) * rot.row(0);
+				//fjac.block<3,1>(idx,j*12+4)  = -c_fit * w * delta(1) * rot.row(1);
+				//fjac.block<3,1>(idx,j*12+5)  = -c_fit * w * delta(1) * rot.row(2);
+				//fjac.block<3,1>(idx,j*12+6)  = -c_fit * w * delta(2) * rot.row(0);
+				//fjac.block<3,1>(idx,j*12+7)  = -c_fit * w * delta(2) * rot.row(1);
+				//fjac.block<3,1>(idx,j*12+8)  = -c_fit * w * delta(2) * rot.row(2);
+				//fjac.block<3,1>(idx,j*12+9)  = -c_fit * w * rot.row(0);
+				//fjac.block<3,1>(idx,j*12+10) = -c_fit * w * rot.row(1);
+				//fjac.block<3,1>(idx,j*12+11) = -c_fit * w * rot.row(2);
+				fjac.block<3,1>(idx,j*12)    = -c_fit * w * delta * (Matrix3d()<<1,0,0, 0,0,0, 0,0,0).finished() * rot;
+				fjac.block<3,1>(idx,j*12+1)  = -c_fit * w * delta * (Matrix3d()<<0,1,0, 0,0,0, 0,0,0).finished() * rot;
+				fjac.block<3,1>(idx,j*12+2)  = -c_fit * w * delta * (Matrix3d()<<0,0,1, 0,0,0, 0,0,0).finished() * rot;
+				fjac.block<3,1>(idx,j*12+3)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 1,0,0, 0,0,0).finished() * rot;
+				fjac.block<3,1>(idx,j*12+4)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,1,0, 0,0,0).finished() * rot;
+				fjac.block<3,1>(idx,j*12+5)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,0,1, 0,0,0).finished() * rot;
+				fjac.block<3,1>(idx,j*12+6)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,0,0, 1,0,0).finished() * rot;
+				fjac.block<3,1>(idx,j*12+7)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,0,0, 0,1,0).finished() * rot;
+				fjac.block<3,1>(idx,j*12+8)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,0,0, 0,0,1).finished() * rot;
+				fjac.block<3,1>(idx,j*12+9)  = -c_fit * w * RowVector3d(1,0,0) * rot;
+				fjac.block<3,1>(idx,j*12+10) = -c_fit * w * RowVector3d(0,1,0) * rot;
+				fjac.block<3,1>(idx,j*12+11) = -c_fit * w * RowVector3d(0,0,1) * rot;
 			}
 		}
 		fjac.block<3,1>(idx,nParams-6) = -c_fit * DL.Vertex(i) * drot_dx;
@@ -147,24 +160,21 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 	}
 	// E-smooth
 	int i0, i1;
-	RowVector3d disp;
 	for (int i=0; i<nEdges; i++) {
 		i0 = mSource.Edge(i)(0);
 		i1 = mSource.Edge(i)(1);
-		disp = mSource.Vertex(i0) - mSource.Vertex(i1);
+		delta = mSource.Vertex(i1) - mSource.Vertex(i0);
 		fjac.block<3,12>(idx,i0*12) = c_smooth * (MatrixXd(3,12) << 
-			disp(0),0,0,  disp(1),0,0,  disp(2),0,0,  1,0,0,
-			0,disp(0),0,  0,disp(1),0,  0,disp(2),0,  0,1,0,
-			0,0,disp(0),  0,0,disp(1),  0,0,disp(2),  0,0,1).finished();
-		fjac.block<3,3>(idx,i1*12) = c_smooth * (MatrixXd(3,3) << 
-			-1,0,0,  0,-1,0,  0,0,-1).finished();
+			delta(0),0,0,  delta(1),0,0,  delta(2),0,0,  1,0,0,
+			0,delta(0),0,  0,delta(1),0,  0,delta(2),0,  0,1,0,
+			0,0,delta(0),  0,0,delta(1),  0,0,delta(2),  0,0,1).finished();
+		fjac.block<3,3>(idx,i1*12+9) << -c_smooth,0,0,  0,-c_smooth,0,  0,0,-c_smooth;
 		idx += 3;
 		fjac.block<3,12>(idx,i1*12) = c_smooth * (MatrixXd(3,12) << 
-			-disp(0),0,0,  -disp(1),0,0,  -disp(2),0,0,  1,0,0,
-			0,-disp(0),0,  0,-disp(1),0,  0,-disp(2),0,  0,1,0,
-			0,0,-disp(0),  0,0,-disp(1),  0,0,-disp(2),  0,0,1).finished();
-		fjac.block<3,3>(idx,i0*12) = c_smooth * (MatrixXd(3,3) << 
-			-1,0,0,  0,-1,0,  0,0,-1).finished();
+			-delta(0),0,0,  -delta(1),0,0,  -delta(2),0,0,  1,0,0,
+			0,-delta(0),0,  0,-delta(1),0,  0,-delta(2),0,  0,1,0,
+			0,0,-delta(0),  0,0,-delta(1),  0,0,-delta(2),  0,0,1).finished();
+		fjac.block<3,3>(idx,i0*12+9) << -c_smooth,0,0,  0,-c_smooth,0,  0,0,-c_smooth;
 		idx += 3;
 	}
 

@@ -126,13 +126,12 @@ Mesh Deformable::Deform (const VectorXd& params, const bool local) const {
 	//-- Global transformation
 	int nParam = params.rows();
 	Matrix3d Rot = Deformable::RotMatrix(params[nParam-6],params[nParam-5],params[nParam-4]);
-	RowVector3d Txn = params.segment<3>(nParam-3);
-	MatrixX3d txnset(nLen,3);
-	txnset.col(0) = VectorXd::Constant(nLen,Txn(0));
-	txnset.col(1) = VectorXd::Constant(nLen,Txn(1));
-	txnset.col(2) = VectorXd::Constant(nLen,Txn(2));
+	MatrixXd Txn(nLen,3);
+	Txn.col(0) = VectorXd::Constant(nLen,params[nParam-3]);
+	Txn.col(1) = VectorXd::Constant(nLen,params[nParam-2]);
+	Txn.col(2) = VectorXd::Constant(nLen,params[nParam-1]);
 	deformset = deformset * Rot;
-	deformset = deformset + txnset;
+	deformset = deformset + Txn;
 	/* DEBUG PRINT *
 	for (int i=0; i<nLen; i++) {
 		sprintf(sInfo,"%d (%f,%f,%f) (%f,%f,%f)",i,Vertex(i)(0),Vertex(i)(1),Vertex(i)(2),deformset(i,0),deformset(i,1),deformset(i,2));

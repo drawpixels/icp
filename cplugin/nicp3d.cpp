@@ -71,12 +71,12 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 	/* DEBUG PRINT */
 	int i,j;
 	for (i=0,j=0; i<params.rows()/12; i++,j+=12) {
-		sprintf(sInfo, "%4d [%f,%f,%f %f,%f,%f %f,%f,%f] [%f,%f,%f]", 
+		sprintf(sInfo, "%4d [%8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f]  (%8.4f,%8.4f,%8.4f)", 
 			i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5),
 			params(j+6),params(j+7),params(j+8),params(j+9),params(j+10),params(j+11));
 		MGlobal::displayInfo(sInfo);
 	}
-	sprintf(sInfo,"G (%f %f %f) (%f %f %f)",params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5));
+	sprintf(sInfo,"G (%8.4f %8.4f %8.4f) (%8.4f %8.4f %8.4f)",params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5));
 	MGlobal::displayInfo(sInfo);
 	/* DEBUG PRINT */
 	Mesh DD = mSrc.Deform(params);
@@ -159,15 +159,19 @@ Mesh nicp3d::NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, dou
 		e = err;
 		DD = src.Deform(params);
 		NN = DD.Match(tgt);
+		//-- LM with Jacobian
 		nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
 		LevenbergMarquardt<nicp_lm_functor> lm(functor);
 		info = lm.lmder1(params);
 		err = lm.fvec.norm();
-		//DenseIndex nfev;
+		//-- LM without Jacobian
+		//nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
 		//VectorXd fvec(functor.values());
+		//DenseIndex nfev;
 		//info = LevenbergMarquardt<nicp_lm_functor>::lmdif1(functor,params,&nfev);
 		//functor(params,fvec);
 		//err = fvec.norm();
+		//-- LM
 		sprintf(sInfo,"%3d: %f [%f,%f,%f]",r,err,c_fit,c_rigid,c_smooth);
 		MGlobal::displayInfo(sInfo);
 		//sprintf(sInfo,"[%f,%f,%f] [%f,%f,%f]", params(n-6),params(n-5),params(n-4),params(n-3),params(n-2),params(n-1));
