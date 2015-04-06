@@ -41,7 +41,7 @@ private:
 	int GetModels (MDagPath& dag1, MDagPath& dag2, MDagPath& dag3);
 	Mesh GetMesh (const MDagPath dag);
 	VectorXd Initialise (const Mesh& m);
-	Mesh NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, double tol=0.001, int runs=100);
+	Mesh NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol=0.001, int runs=100);
 	void ModifyVertices (MDagPath path, const Mesh& m);
 };
 
@@ -67,6 +67,7 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 	MGlobal::displayInfo(sInfo);
 
 	VectorXd params = Initialise (mSrc);
+	
 	Mesh NN = NICP(mSrc,mTgt,params,0.01,20);
 	/* DEBUG PRINT */
 	int i,j;
@@ -146,7 +147,7 @@ VectorXd nicp3d::Initialise (const Mesh& m) {
 	return p;
 }
 
-Mesh nicp3d::NICP (const Deformable& src, const Mesh& tgt, VectorXd& params, double tol, int runs) {
+Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int runs) {
 	char sInfo[500];
 	int n = params.rows();
 	double e, err = 1000000.0;

@@ -39,8 +39,12 @@ nicp3d_SOURCES  := nicp3d.cpp Mesh.cpp Deformable.cpp nicp_lm_functor.cpp
 nicp3d_OBJECTS  := nicp3d.o Mesh.o Deformable.o nicp_lm_functor.o
 nicp3d_PLUGIN   := $(DSTDIR)/nicp3d.$(EXT)
 nicp3d_MAKEFILE := $(DSTDIR)/Makefile
-nicp3d_EXTRA_INCLUDES := -I"$(PKGDIR)/eigen-eigen-10219c95fe65" -I"$(PKGDIR)/libnabo"
+nicp3d_EXTRA_INCLUDES := -I"$(PKGDIR)/eigen-eigen-10219c95fe65" -I"$(PKGDIR)/libnabo" -I"$(PKGDIR)/boost_1_57_0"
 nicp3d_EXTRA_C++FLAGS := -std=c++11
+nicp3d_EXTRA_LFLAGS := -L"$(PKGDIR)/libnabo/build"
+nicp3d_EXTRA_LIBS := -lnabo
+#nicp3d_EXTRA_LFLAGS := -stdlib=libc++ -L"$(PKGDIR)/libnabo/build"
+#nicp3d_EXTRA_LIBS := -lc++ -lnabo
 
 #
 # Include the optional per-plugin Makefile.inc

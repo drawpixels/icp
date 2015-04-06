@@ -6,6 +6,7 @@
 #define MESH_H
 
 #include <Eigen/Core>
+#include <nabo/nabo.h>
 
 using namespace std;
 using namespace Eigen;
@@ -13,14 +14,17 @@ using namespace Eigen;
 class Mesh {
 
 public:
-	// Constructor
+	// Constructor & Destructor
 	Mesh () {};
 	Mesh (const MatrixX3d& v, const MatrixX2i& e) : _Vertices(v), _Edges(e) {};
 	Mesh (const Mesh& m) : _Vertices(m._Vertices), _Edges(m._Edges) {};
+	~Mesh () { if (_NNS!=NULL) delete _NNS; };
 	// Main funtions
-	Mesh Match (const Mesh& target) const;
-	int KNN (const RowVector3d& pt, int k, int* idx, double* dist) const;
-	int Closest (const RowVector3d& pt, double* minDist=NULL) const;
+	Mesh Match (Mesh& target);
+	int KNN (const RowVector3d& pt, int k, int* idx, double* dist);
+	int Closest (const RowVector3d& pt, double* minDist=NULL);
+	int _KNN (const RowVector3d& pt, int k, int* idx, double* dist) const;
+	int _Closest (const RowVector3d& pt, double* minDist=NULL) const;
 	// Supporting functions
 	const int NumVertices () const { return _Vertices.rows(); };
 	const MatrixX3d& Vertices () const { return _Vertices; };
@@ -34,6 +38,7 @@ public:
 private:
 	MatrixX3d _Vertices;
 	MatrixX2i _Edges;
+	Nabo::NNSearchD* _NNS=NULL;
 };
 
 // Global functions

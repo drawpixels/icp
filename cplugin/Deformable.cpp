@@ -26,9 +26,6 @@ Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k)
 	for (int j=0; j<nLen; j++) {
 		KNN(Vertex(j),_Knn+2,idxKnn,distKnn);
 		/* DEBUG PRINT *
-		cout << j << " " << idxKnn[0] << "," << idxKnn[1] << "," << idxKnn[2] << "," << idxKnn[3] << "," << idxKnn[4] << "," << idxKnn[5] << " "
-			<< distKnn[0] << "," << distKnn[1] << "," << distKnn[2] << "," << distKnn[3] << "," << distKnn[4] << "," << distKnn[5]
-			<< endl;
 		sprintf(sInfo,"%2d: %2d %2d %2d %2d %2d %2d %f %f %f %f %f %f",j,
 			idxKnn[0],idxKnn[1],idxKnn[2],idxKnn[3],idxKnn[4],idxKnn[5],
 			distKnn[0],distKnn[1],distKnn[2],distKnn[3],distKnn[4],distKnn[5]);
