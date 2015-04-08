@@ -67,9 +67,9 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 	MGlobal::displayInfo(sInfo);
 
 	VectorXd params = Initialise (mSrc);
-	
+
 	Mesh NN = NICP(mSrc,mTgt,params,0.01,20);
-	/* DEBUG PRINT */
+	/* DEBUG PRINT *
 	int i,j;
 	for (i=0,j=0; i<params.rows()/12; i++,j+=12) {
 		sprintf(sInfo, "%4d [%8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f]  (%8.4f,%8.4f,%8.4f)", 
@@ -79,7 +79,7 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 	}
 	sprintf(sInfo,"G (%8.4f %8.4f %8.4f) (%8.4f %8.4f %8.4f)",params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5));
 	MGlobal::displayInfo(sInfo);
-	/* DEBUG PRINT */
+	* DEBUG PRINT */
 	Mesh DD = mSrc.Deform(params);
 	ModifyVertices(dagSrc,DD);
 	ModifyVertices(dagS2,NN);
@@ -161,25 +161,34 @@ Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int
 		DD = src.Deform(params);
 		NN = DD.Match(tgt);
 		//-- LM with Jacobian
-		nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
-		LevenbergMarquardt<nicp_lm_functor> lm(functor);
-		info = lm.lmder1(params);
-		err = lm.fvec.norm();
-		//-- LM without Jacobian
 		//nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
-		//VectorXd fvec(functor.values());
-		//DenseIndex nfev;
-		//info = LevenbergMarquardt<nicp_lm_functor>::lmdif1(functor,params,&nfev);
-		//functor(params,fvec);
-		//err = fvec.norm();
+		//LevenbergMarquardt<nicp_lm_functor> lm(functor);
+		//info = lm.lmder1(params);
+		//err = lm.fvec.norm();
+		//-- LM without Jacobian
+		nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
+		VectorXd fvec(functor.values());
+		DenseIndex nfev;
+		info = LevenbergMarquardt<nicp_lm_functor>::lmdif1(functor,params,&nfev);
+		functor(params,fvec);
+		err = fvec.norm();
 		//-- LM
 		sprintf(sInfo,"%3d: %f [%f,%f,%f]",r,err,c_fit,c_rigid,c_smooth);
 		MGlobal::displayInfo(sInfo);
-		//sprintf(sInfo,"[%f,%f,%f] [%f,%f,%f]", params(n-6),params(n-5),params(n-4),params(n-3),params(n-2),params(n-1));
-		//MGlobal::displayInfo(sInfo);
 		/* DEBUG PRINT *
 		sprintf(sInfo,"info=%d,iter=%ld,nfev=%ld,njev=%ld fvec=%f",
 			info,lm.iter,lm.nfev,lm.njev,lm.fvec.norm());
+		MGlobal::displayInfo(sInfo);
+		* DEBUG PRINT */
+		/* DEBUG PRINT *
+		int i,j;
+		for (i=0,j=0; i<params.rows()/12; i++,j+=12) {
+			sprintf(sInfo, "%4d [%8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f]  (%8.4f,%8.4f,%8.4f)", 
+				i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5),
+				params(j+6),params(j+7),params(j+8),params(j+9),params(j+10),params(j+11));
+			MGlobal::displayInfo(sInfo);
+		}
+		sprintf(sInfo,"G (%8.4f %8.4f %8.4f) (%8.4f %8.4f %8.4f)",params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5));
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
 		if ((e-err)<tol) {
@@ -191,15 +200,13 @@ Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int
 	}
 	/* DEBUG PRINT *
 	int i,j;
-	for (i=0,j=0; i<params.rows()/10; i++,j+=10) {
-		sprintf(sInfo, "%4d %f,%f,%f,%f,%f,%f,%f,%f,%f,%f", 
-			i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),
-			params(j+5),params(j+6),params(j+7),params(j+8),params(j+9));
+	for (i=0,j=0; i<params.rows()/12; i++,j+=12) {
+		sprintf(sInfo, "%4d [%8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f]  (%8.4f,%8.4f,%8.4f)", 
+			i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5),
+			params(j+6),params(j+7),params(j+8),params(j+9),params(j+10),params(j+11));
 		MGlobal::displayInfo(sInfo);
 	}
-	sprintf(sInfo,"%4d ",i);
-	for ( ; j<params.rows(); j++) 
-		sprintf(sInfo,"%s %f",sInfo,params(j));
+	sprintf(sInfo,"G (%8.4f %8.4f %8.4f) (%8.4f %8.4f %8.4f)",params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5));
 	MGlobal::displayInfo(sInfo);
 	* DEBUG PRINT */
 	return NN;

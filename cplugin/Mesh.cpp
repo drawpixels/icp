@@ -32,10 +32,10 @@ double Distance (const RowVector3d& p1, const RowVector3d& p2) {
 // Return the indices and distances of the k nearest neighbors in the array
 // If pt is in dset, it is the closest point & sort(dist)[0] = 0.0
 //
-int Mesh::KNN (const RowVector3d& pt, int k, int* idx, double* dist) {
+void Mesh::KNN (const RowVector3d& pt, int k, int* idx, double* dist) const {
 	if (_NNS==NULL) {
-		MatrixXd M = _Vertices.transpose();
-		_NNS = Nabo::NNSearchD::createKDTreeLinearHeap(M);
+		_VT = _Vertices.transpose();
+		_NNS = Nabo::NNSearchD::createKDTreeLinearHeap(_VT);
 	}
 	Vector3d q = pt;
 	VectorXi vidx(k);
@@ -50,26 +50,23 @@ int Mesh::KNN (const RowVector3d& pt, int k, int* idx, double* dist) {
 //
 // Return the index of the closest point in the array
 //
-int Mesh::Closest (const RowVector3d& pt, double* minDist) {
-	if (_NNS==NULL) {
-		MatrixXd M = _Vertices.transpose();
-		_NNS = Nabo::NNSearchD::createKDTreeLinearHeap(M);
-	}
-	Vector3d q = pt;
-	VectorXi vidx(1);
-	VectorXd vdist(1);
-	_NNS->knn(q,vidx,vdist);
-	if (minDist!=NULL)
-		*minDist = sqrt(vdist(0));
-	return vidx(0);
+int Mesh::Closest (const RowVector3d& pt, double* minDist) const {
+	int idx; 
+	double dist;
+	this->KNN(pt,1,&idx,&dist);
+	if (minDist)
+		*minDist = dist;
+	return idx;
 }
-
 
 //
 // Return the indices and distances of the k nearest neighbors in the array
 // If pt is in dset, it is the closest point & sort(dist)[0] = 0.0
 //
-int Mesh::_KNN (const RowVector3d& pt, int k, int* idx, double* dist) const {
+// Exhaustive approach - comparing every point with every point
+// Not used. Keep for reference.
+//
+void Mesh::_KNN (const RowVector3d& pt, int k, int* idx, double* dist) const {
 	typedef std::pair <double, int> PAIR;
 	class compare {
 	public:
@@ -103,11 +100,11 @@ int Mesh::_KNN (const RowVector3d& pt, int k, int* idx, double* dist) const {
 		dist[i-1] = t.first;
 		rank.pop();
 	}
-	return size;
 }
 
 //
 // Return the index of the closest point in the array
+// Exhaustive approach. Not used. Keep for reference.
 //
 int Mesh::_Closest (const RowVector3d& pt, double* minDist) const {
 	//-- Initialise with first point in dataset 
@@ -127,7 +124,7 @@ int Mesh::_Closest (const RowVector3d& pt, double* minDist) const {
 	}
 	//-- Return minimum distance if required
 	if (minDist)
-		*minDist = min;
+		*minDist = min*min;
 	return idx;
 }
 
@@ -135,18 +132,19 @@ int Mesh::_Closest (const RowVector3d& pt, double* minDist) const {
 // For each point in source, find the closest point in the target. 
 // Return the closest points in array
 //
-Mesh Mesh::Match (Mesh& target) {
+Mesh Mesh::Match (const Mesh& target) const {
 	int nLen = NumVertices();
 	int idx;
+	double d;
 	char sInfo[100];
 	MatrixX3d m = MatrixX3d (nLen,3);
 	for (int i=0; i<nLen; i++) {
-		idx = target.Closest(Vertex(i));
+		idx = target.Closest(Vertex(i),&d);
 		m.row(i) = target.Vertex(idx);
-		/* DEBUG PRINT */
-		sprintf(sInfo,"%4d %f %f %f",i,m(i,0),m(i,1),m(i,2));
+		/* DEBUG PRINT *
+		sprintf(sInfo,"%4d %4d (%8.4f) %f %f %f",i,idx,d,m(i,0),m(i,1),m(i,2));
 		MGlobal::displayInfo(sInfo);
-		/* DEBUG PRINT */
+		* DEBUG PRINT */
 	}
 	return Mesh(m,_Edges);
 }

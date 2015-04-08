@@ -42,8 +42,8 @@ Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k)
 	/* DEBUG PRINT *
 	for (int i=0; i<10; i++) {
 		sprintf(sInfo,"%2d %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f", i,
-		weights(i,0),weights(i,1),weights(i,2),weights(i,3),weights(i,4),weights(i,5),weights(i,6),weights(i,7),weights(i,8),weights(i,9),
-		weights(i,10),weights(i,11),weights(i,12),weights(i,13),weights(i,14),weights(i,15),weights(i,16),weights(i,17),weights(i,18),weights(i,19));
+		_Weights(i,0),_Weights(i,1),_Weights(i,2),_Weights(i,3),_Weights(i,4),_Weights(i,5),_Weights(i,6),_Weights(i,7),_Weights(i,8),_Weights(i,9),
+		_Weights(i,10),_Weights(i,11),_Weights(i,12),_Weights(i,13),_Weights(i,14),_Weights(i,15),_Weights(i,16),_Weights(i,17),_Weights(i,18),_Weights(i,19));
 		MGlobal::displayInfo(sInfo);
 	}
 	* DEBUG PRINT */
