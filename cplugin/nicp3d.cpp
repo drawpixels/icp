@@ -68,7 +68,7 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 
 	VectorXd params = Initialise (mSrc);
 
-	Mesh NN = NICP(mSrc,mTgt,params,0.01,20);
+	Mesh NN = NICP(mSrc,mTgt,params,0.01,1);
 	/* DEBUG PRINT *
 	int i,j;
 	for (i=0,j=0; i<params.rows()/12; i++,j+=12) {
@@ -80,9 +80,9 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 	sprintf(sInfo,"G (%8.4f %8.4f %8.4f) (%8.4f %8.4f %8.4f)",params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5));
 	MGlobal::displayInfo(sInfo);
 	* DEBUG PRINT */
-	Mesh DD = mSrc.Deform(params);
-	ModifyVertices(dagSrc,DD);
-	ModifyVertices(dagS2,NN);
+	//Mesh DD = mSrc.Deform(params);
+	//ModifyVertices(dagSrc,DD);
+	//ModifyVertices(dagS2,NN);
 	
 	return MS::kSuccess;
 }
@@ -148,33 +148,78 @@ VectorXd nicp3d::Initialise (const Mesh& m) {
 }
 
 Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int runs) {
-	char sInfo[500];
-	int n = params.rows();
-	double e, err = 1000000.0;
+	char sInfo[50000],sInfo1[50000],sInfo2[50000];
+	int nPars = params.rows();
+	int nVerts = src.NumVertices();
+	double e, err = 1000000.0, err2=1000000.0;
 	double c_fit = INIT_C_FIT;
 	double c_rigid = INIT_C_RIGID;
 	double c_smooth = INIT_C_SMOOTH;
 	Mesh DD, NN;
-	int info;
+	int info,info2;
+	int nfev,nfev2,njev,njev2,iter,iter2;
+	MatrixXd fjac,fjac2;
 	for (int r=0; r<runs; r++) {
 		e = err;
 		DD = src.Deform(params);
 		NN = DD.Match(tgt);
 		//-- LM with Jacobian
-		//nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
-		//LevenbergMarquardt<nicp_lm_functor> lm(functor);
-		//info = lm.lmder1(params);
-		//err = lm.fvec.norm();
-		//-- LM without Jacobian
 		nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
-		VectorXd fvec(functor.values());
-		DenseIndex nfev;
-		info = LevenbergMarquardt<nicp_lm_functor>::lmdif1(functor,params,&nfev);
-		functor(params,fvec);
-		err = fvec.norm();
+		LevenbergMarquardt<nicp_lm_functor> lm(functor);
+		info = lm.lmder1(params);
+		err = lm.fvec.norm();
+		nfev = lm.nfev;
+		njev = lm.njev;
+		iter = lm.iter;
+		fjac = lm.fjac;
+		//-- LM without Jacobian
+		//nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
+		//VectorXd fvec(functor.values());
+		//DenseIndex nfev;
+		//info = LevenbergMarquardt<nicp_lm_functor>::lmdif1(functor,params,&nfev);
+		//functor(params,fvec);
+		//err = fvec.norm();
+		//-- LM without Jacobian #2
+		nicp_lm_functor functor2(src,NN,c_fit,c_rigid,c_smooth);
+	    NumericalDiff<nicp_lm_functor> numDiff(functor2);
+		LevenbergMarquardt<NumericalDiff<nicp_lm_functor> > lm2(numDiff);
+		lm2.parameters.maxfev=200*(nPars+1);
+		info2 = lm2.minimize(params);
+		err2 = lm2.fvec.norm();
+		nfev2 = lm2.nfev;
+		njev2 = lm2.njev;
+		iter2 = lm2.iter;
+		fjac2 = lm2.fjac;
 		//-- LM
-		sprintf(sInfo,"%3d: %f [%f,%f,%f]",r,err,c_fit,c_rigid,c_smooth);
+		sprintf(sInfo,"%3d: %f [%f,%f,%f] %d %d %d %d",r,err,c_fit,c_rigid,c_smooth,info,nfev,njev,iter);
 		MGlobal::displayInfo(sInfo);
+		sprintf(sInfo,"     %f [%f,%f,%f] %d %d %d %d",err2,c_fit,c_rigid,c_smooth,info2,nfev2,njev2,iter2);
+		MGlobal::displayInfo(sInfo);
+		int rows = fjac.rows(); 
+		int cols = fjac.cols();
+		MatrixXd fjac_d = fjac - fjac2;
+		for (int i=0; i<rows; i++) {
+			sprintf(sInfo,"%4d",i);
+			sprintf(sInfo1,"    ");
+			sprintf(sInfo2,"    ");
+			for (int j=0,jj=0; j<nVerts; j++,jj+=12) {
+				sprintf(sInfo,"%s|*|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|,|%8.5f|%8.5f|%8.5f",sInfo,
+					fjac(i,jj),fjac(i,jj+1),fjac(i,jj+2),fjac(i,jj+3),fjac(i,jj+4),fjac(i,jj+5),fjac(i,jj+6),fjac(i,jj+7),fjac(i,jj+8),fjac(i,jj+9),fjac(i,jj+10),fjac(i,jj+11));
+				sprintf(sInfo1,"%s|*|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|,|%8.5f|%8.5f|%8.5f",sInfo1,
+					fjac2(i,jj),fjac2(i,jj+1),fjac2(i,jj+2),fjac2(i,jj+3),fjac2(i,jj+4),fjac2(i,jj+5),fjac2(i,jj+6),fjac2(i,jj+7),fjac2(i,jj+8),fjac2(i,jj+9),fjac2(i,jj+10),fjac2(i,jj+11));
+				sprintf(sInfo2,"%s|*|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|,|%8.5f|%8.5f|%8.5f",sInfo2,
+					fjac_d(i,jj),fjac_d(i,jj+1),fjac_d(i,jj+2),fjac_d(i,jj+3),fjac_d(i,jj+4),fjac_d(i,jj+5),fjac_d(i,jj+6),fjac_d(i,jj+7),fjac_d(i,jj+8),fjac_d(i,jj+9),fjac_d(i,jj+10),fjac_d(i,jj+11));
+			}
+			sprintf(sInfo,"%s|**|%8.5f|%8.5f|%8.5f|*|%8.5f|%8.5f|%8.5f|",sInfo,
+				fjac(i,nPars-6),fjac(i,nPars-5),fjac(i,nPars-4),fjac(i,nPars-3),fjac(i,nPars-2),fjac(i,nPars-1));
+			sprintf(sInfo1,"%s|**|%8.5f|%8.5f|%8.5f|*|%8.5f|%8.5f|%8.5f|",sInfo1,
+				fjac2(i,nPars-6),fjac2(i,nPars-5),fjac2(i,nPars-4),fjac2(i,nPars-3),fjac2(i,nPars-2),fjac2(i,nPars-1));
+			sprintf(sInfo2,"%s|**|%8.5f|%8.5f|%8.5f|*|%8.5f|%8.5f|%8.5f|\n",sInfo2,
+				fjac_d(i,nPars-6),fjac_d(i,nPars-5),fjac_d(i,nPars-4),fjac_d(i,nPars-3),fjac_d(i,nPars-2),fjac_d(i,nPars-1));
+			MGlobal::displayInfo(sInfo);
+			MGlobal::displayInfo(sInfo1);
+			MGlobal::displayInfo(sInfo2);
+		}
 		/* DEBUG PRINT *
 		sprintf(sInfo,"info=%d,iter=%ld,nfev=%ld,njev=%ld fvec=%f",
 			info,lm.iter,lm.nfev,lm.njev,lm.fvec.norm());

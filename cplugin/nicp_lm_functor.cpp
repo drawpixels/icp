@@ -100,6 +100,7 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 	int nParams = params.rows();
 
 	int idx=0;	//-- Running index to fill up the output values
+	fjac = MatrixXd::Zero(m_values,m_inputs);
 	//-- E-fit
 	Mesh DL = mSource.Deform(params,true);
 	double w;

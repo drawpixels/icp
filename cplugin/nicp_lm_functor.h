@@ -12,7 +12,7 @@
 
 
 // Generic functor
-template<typename _Scalar, int NX=Dynamic, int NY=Dynamic>
+template<typename _Scalar=double, int NX=Dynamic, int NY=Dynamic>
 struct Functor
 {
 	typedef _Scalar Scalar;
@@ -36,7 +36,7 @@ struct Functor
 //  void operator() (const InputType& x, ValueType* v, JacobianType* _j=0) const;
 };
 
-struct nicp_lm_functor : Functor<double>
+struct nicp_lm_functor : Functor<>
 {
 	Deformable mSource;
 	Mesh mTarget;
