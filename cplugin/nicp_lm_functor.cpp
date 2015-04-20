@@ -8,15 +8,14 @@
 #include <stdlib.h>
 #include <maya/MGlobal.h>
 #include <Eigen/Core>
-#include <unsupported/Eigen/NonLinearOptimization>
+#include <unsupported/Eigen/LevenbergMarquardt>
 #include "mesh.h"
 #include "Deformable.h"
 #include "nicp_lm_functor.h"
 
 nicp_lm_functor::nicp_lm_functor (const Deformable& src, const Mesh& tgt, double f, double r, double s) 
- : mSource(src), mTarget(tgt), c_fit(f), c_rigid(r), c_smooth(s) {
-	m_inputs = mSource.NumVertices()*12 + 6;
-	m_values = mSource.NumVertices()*9 + mSource.NumEdges()*6;
+ :  DenseFunctor<double>(src.NumVertices()*12 + 6,src.NumVertices()*9 + src.NumEdges()*6),
+	mSource(src), mTarget(tgt), c_fit(f), c_rigid(r), c_smooth(s) {
 }
 
 void nicp_lm_functor::SetCoeff (double f, double r, double s) {
@@ -100,7 +99,7 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 	int nParams = params.rows();
 
 	int idx=0;	//-- Running index to fill up the output values
-	fjac = MatrixXd::Zero(m_values,m_inputs);
+	fjac.resize(m_values,m_inputs);
 	//-- E-fit
 	Mesh DL = mSource.Deform(params,true);
 	double w;
@@ -113,36 +112,24 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 			w = mSource.Weights()(j,i);
 			if (w!=0) {
 				delta = mSource.Vertex(i) - mSource.Vertex(j);
-				//fjac.block<3,1>(idx,j*12)    = -c_fit * w * delta(0) * rot.row(0);
-				//fjac.block<3,1>(idx,j*12+1)  = -c_fit * w * delta(0) * rot.row(1);
-				//fjac.block<3,1>(idx,j*12+2)  = -c_fit * w * delta(0) * rot.row(2);
-				//fjac.block<3,1>(idx,j*12+3)  = -c_fit * w * delta(1) * rot.row(0);
-				//fjac.block<3,1>(idx,j*12+4)  = -c_fit * w * delta(1) * rot.row(1);
-				//fjac.block<3,1>(idx,j*12+5)  = -c_fit * w * delta(1) * rot.row(2);
-				//fjac.block<3,1>(idx,j*12+6)  = -c_fit * w * delta(2) * rot.row(0);
-				//fjac.block<3,1>(idx,j*12+7)  = -c_fit * w * delta(2) * rot.row(1);
-				//fjac.block<3,1>(idx,j*12+8)  = -c_fit * w * delta(2) * rot.row(2);
-				//fjac.block<3,1>(idx,j*12+9)  = -c_fit * w * rot.row(0);
-				//fjac.block<3,1>(idx,j*12+10) = -c_fit * w * rot.row(1);
-				//fjac.block<3,1>(idx,j*12+11) = -c_fit * w * rot.row(2);
-				fjac.block<3,1>(idx,j*12)    = -c_fit * w * delta * (Matrix3d()<<1,0,0, 0,0,0, 0,0,0).finished() * rot;
-				fjac.block<3,1>(idx,j*12+1)  = -c_fit * w * delta * (Matrix3d()<<0,1,0, 0,0,0, 0,0,0).finished() * rot;
-				fjac.block<3,1>(idx,j*12+2)  = -c_fit * w * delta * (Matrix3d()<<0,0,1, 0,0,0, 0,0,0).finished() * rot;
-				fjac.block<3,1>(idx,j*12+3)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 1,0,0, 0,0,0).finished() * rot;
-				fjac.block<3,1>(idx,j*12+4)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,1,0, 0,0,0).finished() * rot;
-				fjac.block<3,1>(idx,j*12+5)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,0,1, 0,0,0).finished() * rot;
-				fjac.block<3,1>(idx,j*12+6)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,0,0, 1,0,0).finished() * rot;
-				fjac.block<3,1>(idx,j*12+7)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,0,0, 0,1,0).finished() * rot;
-				fjac.block<3,1>(idx,j*12+8)  = -c_fit * w * delta * (Matrix3d()<<0,0,0, 0,0,0, 0,0,1).finished() * rot;
-				fjac.block<3,1>(idx,j*12+9)  = -c_fit * w * RowVector3d(1,0,0) * rot;
-				fjac.block<3,1>(idx,j*12+10) = -c_fit * w * RowVector3d(0,1,0) * rot;
-				fjac.block<3,1>(idx,j*12+11) = -c_fit * w * RowVector3d(0,0,1) * rot;
+				fjac.block<3,1>(idx,j*12)    = -c_fit * w * delta(0) * rot.row(0);
+				fjac.block<3,1>(idx,j*12+1)  = -c_fit * w * delta(0) * rot.row(1);
+				fjac.block<3,1>(idx,j*12+2)  = -c_fit * w * delta(0) * rot.row(2);
+				fjac.block<3,1>(idx,j*12+3)  = -c_fit * w * delta(1) * rot.row(0);
+				fjac.block<3,1>(idx,j*12+4)  = -c_fit * w * delta(1) * rot.row(1);
+				fjac.block<3,1>(idx,j*12+5)  = -c_fit * w * delta(1) * rot.row(2);
+				fjac.block<3,1>(idx,j*12+6)  = -c_fit * w * delta(2) * rot.row(0);
+				fjac.block<3,1>(idx,j*12+7)  = -c_fit * w * delta(2) * rot.row(1);
+				fjac.block<3,1>(idx,j*12+8)  = -c_fit * w * delta(2) * rot.row(2);
+				fjac.block<3,1>(idx,j*12+9)  = -c_fit * w * rot.row(0);
+				fjac.block<3,1>(idx,j*12+10) = -c_fit * w * rot.row(1);
+				fjac.block<3,1>(idx,j*12+11) = -c_fit * w * rot.row(2);
 			}
 		}
 		fjac.block<3,1>(idx,nParams-6) = -c_fit * DL.Vertex(i) * drot_dx;
 		fjac.block<3,1>(idx,nParams-5) = -c_fit * DL.Vertex(i) * drot_dy;
 		fjac.block<3,1>(idx,nParams-4) = -c_fit * DL.Vertex(i) * drot_dz;
-		fjac.block<3,3>(idx,nParams-3) << -c_fit,0,0,  0,-c_fit,0,  0,0,c_fit;
+		fjac.block<3,3>(idx,nParams-3) << -c_fit,0,0,  0,-c_fit,0,  0,0,-c_fit;
 		idx += 3;
 	}
 	// E-rigid 

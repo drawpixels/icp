@@ -6,37 +6,11 @@
 #define NICP_LM_FUNCTOR_H
 
 #include <Eigen/Core>
-#include <unsupported/Eigen/NonLinearOptimization>
+#include <unsupported/Eigen/LevenbergMarquardt>
 #include "mesh.h"
 #include "Deformable.h"
 
-
-// Generic functor
-template<typename _Scalar=double, int NX=Dynamic, int NY=Dynamic>
-struct Functor
-{
-	typedef _Scalar Scalar;
-	enum {
-		InputsAtCompileTime = NX,
-		ValuesAtCompileTime = NY
-	};
-	typedef Matrix<Scalar,InputsAtCompileTime,1> InputType;
-	typedef Matrix<Scalar,ValuesAtCompileTime,1> ValueType;
-	typedef Matrix<Scalar,ValuesAtCompileTime,InputsAtCompileTime> JacobianType;
-
-	int m_inputs, m_values;
-
-	//Functor() : m_inputs(InputsAtCompileTime), m_values(ValuesAtCompileTime) {}
-	//Functor(int inputs, int values) : m_inputs(inputs), m_values(values) {}
-
-	int inputs() const { return m_inputs; }
-	int values() const { return m_values; }
-
-  // you should define that in the subclass :
-//  void operator() (const InputType& x, ValueType* v, JacobianType* _j=0) const;
-};
-
-struct nicp_lm_functor : Functor<>
+struct nicp_lm_functor : DenseFunctor<double>
 {
 	Deformable mSource;
 	Mesh mTarget;
