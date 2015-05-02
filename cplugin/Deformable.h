@@ -22,6 +22,7 @@ public:
 	// Main functions
 	Mesh Deform (const VectorXd& params, const bool local=false) const;
 	// Supporting functions 
+	const int K() const { return _K; };
 	const MatrixXd& Weights() const { return _Weights; };
 	static void PtoAB (const VectorXd& params, int i, Matrix3d& A, RowVector3d& b);
 	static Matrix3d RotMatrix (const double x, const double y, const double z);
@@ -29,7 +30,7 @@ public:
 	
 
 private:
-	const int _Knn;
+	const int _K;
 	MatrixXd _Weights;
 };
 

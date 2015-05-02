@@ -4,6 +4,7 @@
 
 #include <sstream>
 #include <iostream>
+#include <vector>
 #include <stdio.h>
 #include <stdlib.h>
 #include <maya/MGlobal.h>
@@ -14,7 +15,7 @@
 #include "nicp_lm_functor.h"
 
 nicp_lm_functor::nicp_lm_functor (const Deformable& src, const Mesh& tgt, double f, double r, double s) 
- :  DenseFunctor<double>(src.NumVertices()*12 + 6,src.NumVertices()*9 + src.NumEdges()*6),
+ :  SparseFunctor<double,int> (src.NumVertices()*12 + 6, src.NumVertices()*9 + src.NumEdges()*6),
 	mSource(src), mTarget(tgt), c_fit(f), c_rigid(r), c_smooth(s) {
 }
 
@@ -91,60 +92,76 @@ int nicp_lm_functor::operator() (const VectorXd &params, VectorXd &fvec) const
 	return 0;
 }
 
+typedef Eigen::Triplet<double> T;
+
+void Push_Triplet (std::vector<T> &tlist, const int row, const int col, const MatrixXd &m)
+{
+	for (int i=0; i<m.rows(); i++) 
+		for (int j=0; j<m.cols(); j++) 
+			tlist.push_back(T(row+i,col+j,m(i,j)));
+	/* DEBUG PRINT */
+	for (int i=0; i<m.rows(); i++) {
+		std::cout << (row+i) << ": ";
+		for (int j=0; j<m.cols(); j++) {
+			std::cout << (col+j) << "=" << m(i,j) << " ";
+		}
+		std::cout << std::endl;
+	}
+	/* DEBUG PRINT */
+}
+
 // x = (in) parameters, fjac = (out) jacobian (15x3 matrix)
-int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
+int nicp_lm_functor::df (const VectorXd &params, JacobianType &fjac) const
 {
 	int nVertices = mSource.NumVertices();
 	int nEdges = mSource.NumEdges();
 	int nParams = params.rows();
 
+	std::vector<T> tripList;
+	tripList.reserve(3 * nVertices * (mSource.K()*12+6) + 6 * nVertices * 9 + 6 * nEdges * 15);
+
 	int idx=0;	//-- Running index to fill up the output values
-	fjac.resize(m_values,m_inputs);
+
 	//-- E-fit
 	Mesh DL = mSource.Deform(params,true);
 	double w;
 	RowVector3d delta;
-	Matrix3d rot, drot_dx, drot_dy, drot_dz;
+	Matrix3d rot, rot_t, drot_dx, drot_dy, drot_dz;
 	rot = Deformable::RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4));
+	rot_t = rot.transpose();
 	Deformable::D_RotMatrix(params(nParams-6),params(nParams-5),params(nParams-4),drot_dx,drot_dy,drot_dz);
 	for (int i=0; i<nVertices; i++) {
 		for (int j=0; j<nVertices; j++) {
 			w = mSource.Weights()(j,i);
 			if (w!=0) {
 				delta = mSource.Vertex(i) - mSource.Vertex(j);
-				fjac.block<3,1>(idx,j*12)    = -c_fit * w * delta(0) * rot.row(0);
-				fjac.block<3,1>(idx,j*12+1)  = -c_fit * w * delta(0) * rot.row(1);
-				fjac.block<3,1>(idx,j*12+2)  = -c_fit * w * delta(0) * rot.row(2);
-				fjac.block<3,1>(idx,j*12+3)  = -c_fit * w * delta(1) * rot.row(0);
-				fjac.block<3,1>(idx,j*12+4)  = -c_fit * w * delta(1) * rot.row(1);
-				fjac.block<3,1>(idx,j*12+5)  = -c_fit * w * delta(1) * rot.row(2);
-				fjac.block<3,1>(idx,j*12+6)  = -c_fit * w * delta(2) * rot.row(0);
-				fjac.block<3,1>(idx,j*12+7)  = -c_fit * w * delta(2) * rot.row(1);
-				fjac.block<3,1>(idx,j*12+8)  = -c_fit * w * delta(2) * rot.row(2);
-				fjac.block<3,1>(idx,j*12+9)  = -c_fit * w * rot.row(0);
-				fjac.block<3,1>(idx,j*12+10) = -c_fit * w * rot.row(1);
-				fjac.block<3,1>(idx,j*12+11) = -c_fit * w * rot.row(2);
+				Push_Triplet (tripList, idx, j*12,   -c_fit * w * delta(0) * rot_t);
+				Push_Triplet (tripList, idx, j*12+3, -c_fit * w * delta(1) * rot_t);
+				Push_Triplet (tripList, idx, j*12+6, -c_fit * w * delta(2) * rot_t);
+				Push_Triplet (tripList, idx, j*12+9, -c_fit * w * rot_t);
 			}
 		}
-		fjac.block<3,1>(idx,nParams-6) = -c_fit * DL.Vertex(i) * drot_dx;
-		fjac.block<3,1>(idx,nParams-5) = -c_fit * DL.Vertex(i) * drot_dy;
-		fjac.block<3,1>(idx,nParams-4) = -c_fit * DL.Vertex(i) * drot_dz;
-		fjac.block<3,3>(idx,nParams-3) << -c_fit,0,0,  0,-c_fit,0,  0,0,-c_fit;
+		Push_Triplet (tripList, idx, nParams-6, -c_fit * (DL.Vertex(i) * drot_dx).transpose());
+		Push_Triplet (tripList, idx, nParams-5, -c_fit * (DL.Vertex(i) * drot_dy).transpose());
+		Push_Triplet (tripList, idx, nParams-4, -c_fit * (DL.Vertex(i) * drot_dz).transpose());
+		Push_Triplet (tripList, idx, nParams-3, (Matrix3d() << -c_fit,0,0, 0,-c_fit,0, 0,0,-c_fit).finished());
 		idx += 3;
+		std::cout << "E-fit " << i << std::endl;
 	}
 	// E-rigid 
 	Matrix3d A;
 	RowVector3d b;
 	for (int i=0; i<nVertices; i++) {
 		Deformable::PtoAB(params,i,A,b);
-		fjac.block<6,9>(idx,i*12) = c_rigid * (MatrixXd(6,9) <<
+		Push_Triplet (tripList, idx, i*12, c_rigid * (MatrixXd(6,9) <<
 			A(1,0),A(1,1),A(1,2),  A(0,0),A(0,1),A(0,2),  0,0,0,
 			0,0,0,  A(2,0),A(2,1),A(2,2),  A(1,0),A(1,1),A(1,2),
 			A(2,0),A(2,1),A(2,2),  0,0,0,  A(0,0),A(0,1),A(0,2),
 			-2*A(0,0),-2*A(0,1),-2*A(0,2),  0,0,0,  0,0,0,
 			0,0,0,  -2*A(1,0),-2*A(1,1),-2*A(1,2),  0,0,0,
-			0,0,0,  0,0,0,  -2*A(2,0),-2*A(2,1),-2*A(2,2)).finished();
+			0,0,0,  0,0,0,  -2*A(2,0),-2*A(2,1),-2*A(2,2)).finished());
 		idx += 6;
+		std::cout << "E-rigid " << i << std::endl;
 	}
 	// E-smooth
 	int i0, i1;
@@ -152,20 +169,26 @@ int nicp_lm_functor::df (const VectorXd &params, MatrixXd &fjac) const
 		i0 = mSource.Edge(i)(0);
 		i1 = mSource.Edge(i)(1);
 		delta = mSource.Vertex(i1) - mSource.Vertex(i0);
-		fjac.block<3,12>(idx,i0*12) = c_smooth * (MatrixXd(3,12) << 
+
+		Push_Triplet (tripList, idx, i0*12,	c_smooth * (MatrixXd(3,12) << 
 			delta(0),0,0,  delta(1),0,0,  delta(2),0,0,  1,0,0,
 			0,delta(0),0,  0,delta(1),0,  0,delta(2),0,  0,1,0,
-			0,0,delta(0),  0,0,delta(1),  0,0,delta(2),  0,0,1).finished();
-		fjac.block<3,3>(idx,i1*12+9) << -c_smooth,0,0,  0,-c_smooth,0,  0,0,-c_smooth;
+			0,0,delta(0),  0,0,delta(1),  0,0,delta(2),  0,0,1).finished());
+		Push_Triplet (tripList, idx, i1*12+9, (Matrix3d() << 
+			-c_smooth,0,0,  0,-c_smooth,0,  0,0,-c_smooth).finished());
 		idx += 3;
-		fjac.block<3,12>(idx,i1*12) = c_smooth * (MatrixXd(3,12) << 
+
+		Push_Triplet (tripList, idx, i1*12, c_smooth * (MatrixXd(3,12) << 
 			-delta(0),0,0,  -delta(1),0,0,  -delta(2),0,0,  1,0,0,
 			0,-delta(0),0,  0,-delta(1),0,  0,-delta(2),0,  0,1,0,
-			0,0,-delta(0),  0,0,-delta(1),  0,0,-delta(2),  0,0,1).finished();
-		fjac.block<3,3>(idx,i0*12+9) << -c_smooth,0,0,  0,-c_smooth,0,  0,0,-c_smooth;
+			0,0,-delta(0),  0,0,-delta(1),  0,0,-delta(2),  0,0,1).finished());
+		Push_Triplet (tripList, idx, i0*12+9, (Matrix3d() << 
+			-c_smooth,0,0,  0,-c_smooth,0,  0,0,-c_smooth).finished());
 		idx += 3;
+		std::cout << "E-smooth " << i << std::endl;
 	}
-
+	fjac.resize(m_values,m_inputs);
+	fjac.setFromTriplets(tripList.begin(),tripList.end());
     return 0;
 }
 

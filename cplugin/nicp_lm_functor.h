@@ -10,7 +10,7 @@
 #include "mesh.h"
 #include "Deformable.h"
 
-struct nicp_lm_functor : DenseFunctor<double>
+struct nicp_lm_functor : SparseFunctor<double,int>
 {
 	Deformable mSource;
 	Mesh mTarget;
@@ -19,7 +19,7 @@ struct nicp_lm_functor : DenseFunctor<double>
 	nicp_lm_functor (const Deformable& src, const Mesh& tgt, double f=1.0, double r=1.0, double s=1.0);
 	void SetCoeff (double f, double r, double s);
     int operator() (const VectorXd &x, VectorXd &fvec) const;
-    int df (const VectorXd &x, MatrixXd &fjac) const;
+    int df (const VectorXd &x, JacobianType &fjac) const;
 };
 
 #endif

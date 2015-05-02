@@ -9,6 +9,7 @@
 #include <vector>
 #include <iostream>
 #include <ctime>
+#include <exception>
 #include <Eigen/Core>
 #include <unsupported/Eigen/LevenbergMarquardt>
 #include <maya/MGlobal.h>
@@ -24,6 +25,7 @@
 #include "Mesh.h"
 #include "Deformable.h"
 #include "nicp_lm_functor.h"
+#include "nicp_lm_dense_functor.h"
 
 #define INIT_C_FIT 5.0
 #define INIT_C_RIGID 50.0
@@ -70,24 +72,29 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 
 	VectorXd params = Initialise (mSrc);
 
-	c_start = std::clock();
-	Mesh NN = NICP(mSrc,mTgt,params,0.01,50);
-	c_end = std::clock();
-	std::cout << "Elapse time = " << (float)(c_end - c_start)/(CLOCKS_PER_SEC) << " sec." << std::endl; 
-	/* DEBUG PRINT *
-	int i,j;
-	for (i=0,j=0; i<params.rows()/12; i++,j+=12) {
-		sprintf(sInfo, "%4d [%8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f]  (%8.4f,%8.4f,%8.4f)", 
-			i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5),
-			params(j+6),params(j+7),params(j+8),params(j+9),params(j+10),params(j+11));
+	try {
+		c_start = std::clock();
+		Mesh NN = NICP(mSrc,mTgt,params,0.01,1);
+		c_end = std::clock();
+		std::cout << "Elapse time = " << (float)(c_end - c_start)/(CLOCKS_PER_SEC) << " sec." << std::endl; 
+		/* DEBUG PRINT *
+		int i,j;
+		for (i=0,j=0; i<params.rows()/12; i++,j+=12) {
+			sprintf(sInfo, "%4d [%8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f   %8.4f,%8.4f,%8.4f]  (%8.4f,%8.4f,%8.4f)", 
+				i,params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5),
+				params(j+6),params(j+7),params(j+8),params(j+9),params(j+10),params(j+11));
+			MGlobal::displayInfo(sInfo);
+		}
+		sprintf(sInfo,"G (%8.4f %8.4f %8.4f) (%8.4f %8.4f %8.4f)",params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5));
 		MGlobal::displayInfo(sInfo);
+		* DEBUG PRINT */
+		//Mesh DD = mSrc.Deform(params);
+		//ModifyVertices(dagSrc,DD);
+		//ModifyVertices(dagS2,NN);
 	}
-	sprintf(sInfo,"G (%8.4f %8.4f %8.4f) (%8.4f %8.4f %8.4f)",params(j),params(j+1),params(j+2),params(j+3),params(j+4),params(j+5));
-	MGlobal::displayInfo(sInfo);
-	* DEBUG PRINT */
-	Mesh DD = mSrc.Deform(params);
-	ModifyVertices(dagSrc,DD);
-	ModifyVertices(dagS2,NN);
+	catch (exception & e) {
+		std::cout << "Exception: " << e.what() << std::endl;
+	}
 	
 	return MS::kSuccess;
 }
@@ -167,11 +174,14 @@ Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int
 	int njev=0;
 	int iter=0;
 	int r;
+	MatrixXd fjac2;
+	VectorXd pbackup=params;
 	for (r=0; r<runs; r++) {
 		e = err;
 		DD = src.Deform(params);
 		NN = DD.Match(tgt);
 		//-- LM with Jacobian
+		/*
 		nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
 		LevenbergMarquardt<nicp_lm_functor> lm(functor);
 		info = lm.lmder1(params);
@@ -180,6 +190,7 @@ Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int
 		njev += lm.njev();
 		iter += lm.iterations();
 		fjac = lm.jacobian();
+		*/
 		//-- LM without Jacobian LMDIF1
 		/*
 		nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
@@ -190,18 +201,16 @@ Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int
 		err = fvec.norm();
 		*/
 		//-- LM without Jacobian #2
-		/*
-		nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
-	    NumericalDiff<nicp_lm_functor> numDiff(functor);
-		LevenbergMarquardt<NumericalDiff<nicp_lm_functor> > lm(numDiff);
-		lm.setMaxfev(200*(nPars+1));
-		info = lm.minimize(params);
-		err = lm.fvec().norm();
-		nfev += lm.nfev();
-		njev += lm.njev();
-		iter += lm.iterations();
-		fjac = lm.jacobian();
-		*/
+		nicp_lm_dense_functor dense_functor(src,NN,c_fit,c_rigid,c_smooth);
+	    NumericalDiff<nicp_lm_dense_functor> numDiff(dense_functor);
+		LevenbergMarquardt<NumericalDiff<nicp_lm_dense_functor> > lmd(numDiff);
+		lmd.setMaxfev(200*(nPars+1));
+		info = lmd.minimize(params);
+		err = lmd.fvec().norm();
+		nfev += lmd.nfev();
+		njev += lmd.njev();
+		iter += lmd.iterations();
+		fjac2 = lmd.jacobian();
 		//-- LM
 		//sprintf(sInfo,"%3d: %f [%f,%f,%f] %d %d %d %d",r,err,c_fit,c_rigid,c_smooth,info,nfev,njev,iter);
 		//MGlobal::displayInfo(sInfo);
@@ -210,20 +219,34 @@ Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int
 			info,lm.iter,lm.nfev,lm.njev,lm.fvec.norm());
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
-		/* DEBUG PRINT *
-		int rows = fjac.rows(); 
-		int cols = fjac.cols();
+		/* DEBUG PRINT */
+		int rows = fjac2.rows(); 
+		int cols = fjac2.cols();
 		for (int i=0; i<rows; i++) {
 			sprintf(sInfo,"%4d",i);
 			for (int j=0,jj=0; j<nVerts; j++,jj+=12) {
 				sprintf(sInfo,"%s|*|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|%8.5f|,|%8.5f|%8.5f|%8.5f",sInfo,
-					fjac(i,jj),fjac(i,jj+1),fjac(i,jj+2),fjac(i,jj+3),fjac(i,jj+4),fjac(i,jj+5),fjac(i,jj+6),fjac(i,jj+7),fjac(i,jj+8),fjac(i,jj+9),fjac(i,jj+10),fjac(i,jj+11));
+					fjac2(i,jj),fjac2(i,jj+1),fjac2(i,jj+2),fjac2(i,jj+3),fjac2(i,jj+4),fjac2(i,jj+5),fjac2(i,jj+6),fjac2(i,jj+7),fjac2(i,jj+8),fjac2(i,jj+9),fjac2(i,jj+10),fjac2(i,jj+11));
 			}
 			sprintf(sInfo,"%s|**|%8.5f|%8.5f|%8.5f|*|%8.5f|%8.5f|%8.5f|",sInfo,
-				fjac(i,nPars-6),fjac(i,nPars-5),fjac(i,nPars-4),fjac(i,nPars-3),fjac(i,nPars-2),fjac(i,nPars-1));
+				fjac2(i,nPars-6),fjac2(i,nPars-5),fjac2(i,nPars-4),fjac2(i,nPars-3),fjac2(i,nPars-2),fjac2(i,nPars-1));
 			MGlobal::displayInfo(sInfo);
 		}
-		* DEBUG PRINT */
+
+
+		//-- LM with Jacobian
+		//params = pbackup;
+		//nicp_lm_functor functor(src,NN,c_fit,c_rigid,c_smooth);
+		//LevenbergMarquardt<nicp_lm_functor> lm(functor);
+		//info = lm.lmder1(params);
+		//err = lm.fvec().norm();
+		//nfev += lm.nfev();
+		//njev += lm.njev();
+		//iter += lm.iterations();
+		//fjac = lm.jacobian();
+
+
+		/* DEBUG PRINT */
 		if ((e-err)<tol) {
 			c_rigid /= 2.0;
 			c_smooth /= 2.0;

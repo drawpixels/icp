@@ -14,17 +14,17 @@
 
 
 Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k) 
-: Mesh(v,e), _Knn(k) {
+: Mesh(v,e), _K(k) {
 	char sInfo[500];
 	// Initialise 
 	const int nLen = NumVertices();
 	//-- Calculate weights
-	int idxKnn[_Knn+2];
-	double distKnn[_Knn+2];
+	int idxKnn[_K+2];
+	double distKnn[_K+2];
 	double distSum, distMax, denom;
 	_Weights = MatrixXd::Zero(nLen,nLen);
 	for (int j=0; j<nLen; j++) {
-		KNN(Vertex(j),_Knn+2,idxKnn,distKnn);
+		KNN(Vertex(j),_K+2,idxKnn,distKnn);
 		/* DEBUG PRINT *
 		sprintf(sInfo,"%2d: %2d %2d %2d %2d %2d %2d %f %f %f %f %f %f",j,
 			idxKnn[0],idxKnn[1],idxKnn[2],idxKnn[3],idxKnn[4],idxKnn[5],
@@ -32,11 +32,11 @@ Deformable::Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k)
 		MGlobal::displayInfo(sInfo);
 		* DEBUG PRINT */
 		distSum = 0;
-		distMax = distKnn[_Knn+1];
-		for (int i=1; i<_Knn+1; i++)
+		distMax = distKnn[_K+1];
+		for (int i=1; i<_K+1; i++)
 			distSum += distKnn[i];
-		denom = (double)_Knn - distSum / distMax;
-		for (int i=1; i<_Knn+1; i++)
+		denom = (double)_K - distSum / distMax;
+		for (int i=1; i<_K+1; i++)
 			_Weights(idxKnn[i],j) = (1 - distKnn[i]/distMax) / denom;
 	}
 	/* DEBUG PRINT *
