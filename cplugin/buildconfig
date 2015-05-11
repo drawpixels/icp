@@ -101,11 +101,13 @@ endif
 CFLAGS		= -DCC_GNU_ -DOSMac_ -DOSMacOSX_ -DREQUIRE_IOSTREAM\
 				-DOSMac_MachO_ -O3 $(ARCH_FLAGS)  -D_LANGUAGE_C_PLUS_PLUS \
 				-include "$(DEVKIT_INCLUDE)/maya/OpenMayaMac.h" 
-C++FLAGS	= $(CFLAGS) -stdlib=libstdc++ $(WARNFLAGS) $(ERROR_FLAGS) -fno-gnu-keywords -fpascal-strings
+#--C++FLAGS	= $(CFLAGS) -stdlib=libstdc++ $(WARNFLAGS) $(ERROR_FLAGS) -fno-gnu-keywords -fpascal-strings
+C++FLAGS	= $(CFLAGS) $(WARNFLAGS) $(ERROR_FLAGS) -fno-gnu-keywords -fpascal-strings
 INCLUDES	= -I$(SRCDIR) -I"$(DEVKIT_INCLUDE)"
 DYNLIB_LOCATION	= $(MAYA_LOCATION)/MacOS
 
-LFLAGS		= 	-stdlib=libstdc++ -fno-gnu-keywords -fpascal-strings  \
+#--LFLAGS		= 	-stdlib=libstdc++ -fno-gnu-keywords -fpascal-strings  
+LFLAGS		= 	-fno-gnu-keywords -fpascal-strings  \
 				-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.10.sdk \
 				$(ARCH_FLAGS) -headerpad_max_install_names \
 				-framework System -framework SystemConfiguration \

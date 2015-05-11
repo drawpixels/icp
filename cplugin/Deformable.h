@@ -5,6 +5,7 @@
 #ifndef DEFORMABLE_H
 #define DEFORMABLE_H
 
+#include <iostream>
 #include <Eigen/Core>
 #include "Mesh.h"
 
@@ -18,7 +19,8 @@ class Deformable : public Mesh {
 public:
 	// Constructors
 	Deformable (const MatrixX3d& v, const MatrixX2i& e, const int k=DEF_KNN);
-	Deformable (const Mesh& m) : Deformable (m.Vertices(), m.Edges()) {};
+	Deformable (const Mesh& m) : Deformable(m.Vertices(), m.Edges()) {};
+	Deformable (const Deformable& d) : Mesh(d), _K(d._K), _Weights(d._Weights) {};
 	// Main functions
 	Mesh Deform (const VectorXd& params, const bool local=false) const;
 	// Supporting functions 

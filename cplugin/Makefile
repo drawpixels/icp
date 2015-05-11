@@ -35,14 +35,14 @@ SRCDIR := .
 DSTDIR := .
 PKGDIR := $(HOME)/Documents/Packages
 
-nicp3d_SOURCES  := nicp3d.cpp Mesh.cpp Deformable.cpp nicp_lm_functor.cpp nicp_lm_dense_functor.cpp
-nicp3d_OBJECTS  := nicp3d.o Mesh.o Deformable.o nicp_lm_functor.o nicp_lm_dense_functor.o
+nicp3d_SOURCES  := nicp3d.cpp Mesh.cpp Deformable.cpp NICP_CostFunction.cpp
+nicp3d_OBJECTS  := nicp3d.o Mesh.o Deformable.o NICP_CostFunction.o
 nicp3d_PLUGIN   := $(DSTDIR)/nicp3d.$(EXT)
 nicp3d_MAKEFILE := $(DSTDIR)/Makefile
-nicp3d_EXTRA_INCLUDES := -I"$(PKGDIR)/eigen-eigen-10219c95fe65" -I"$(PKGDIR)/libnabo" -I"$(PKGDIR)/boost_1_57_0"
+nicp3d_EXTRA_INCLUDES := -I"$(PKGDIR)/eigen-eigen-10219c95fe65" -I"$(PKGDIR)/libnabo" -I"$(PKGDIR)/boost_1_57_0" -I"$(PKGDIR)/glog-0.3.3/src" -I"$(PKGDIR)/ceres-solver-1.10.0/include" -I"$(PKGDIR)/ceres-solver-1.10.0/build/config" -I"$(PKGDIR)/SuiteSparse/Include"
 nicp3d_EXTRA_C++FLAGS := -std=c++11
-nicp3d_EXTRA_LFLAGS := -framework Accelerate -L"$(PKGDIR)/libnabo/build"
-nicp3d_EXTRA_LIBS := -lnabo
+nicp3d_EXTRA_LFLAGS := -framework Accelerate -L"$(PKGDIR)/libnabo/build" -L"$(PKGDIR)/ceres-solver-1.10.0/build/lib" -L"$(PKGDIR)/SuiteSparse/Lib" -L"$(PKGDIR)/glog-0.3.3/lib"
+nicp3d_EXTRA_LIBS := -lnabo -lceres -lsuitesparseconfig -lspqr -lcholmod -lccolamd -lcamd -lcolamd -lamd -lmetis -lcxsparse -lglog
 #nicp3d_EXTRA_LFLAGS := -stdlib=libc++ -L"$(PKGDIR)/libnabo/build"
 #nicp3d_EXTRA_LIBS := -lc++ -lnabo
 

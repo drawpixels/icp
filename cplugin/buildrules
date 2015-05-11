@@ -49,11 +49,11 @@ all : plugins
 ##################
 
 %.o :	%.c
-	$(CC) -c $(INCLUDES) $(CFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $(INCLUDES) $< -o $@
 
 %.o :	%.cpp
-	$(C++) -c $(INCLUDES) $(C++FLAGS) $< -o $@
+	$(C++) -c $(C++FLAGS) $(INCLUDES) $< -o $@
 
 %.i :	%.cpp
-	$(C++) -E $(INCLUDES) $(C++FLAGS) $*.cpp > $*.i
+	$(C++) -E $(C++FLAGS) $(INCLUDES) $*.cpp > $*.i
 

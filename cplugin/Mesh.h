@@ -16,8 +16,8 @@ class Mesh {
 public:
 	// Constructor & Destructor
 	Mesh () {};
-	Mesh (const MatrixX3d& v, const MatrixX2i& e) : _Vertices(v), _Edges(e) {};
-	Mesh (const Mesh& m) : _Vertices(m._Vertices), _Edges(m._Edges) {};
+	Mesh (const MatrixX3d& v, const MatrixX2i& e) : _Vertices(v), _Edges(e), _NNS(NULL) {};
+	Mesh (const Mesh& m) : _Vertices(m._Vertices), _Edges(m._Edges), _NNS(NULL) {};
 	~Mesh () { if (_NNS!=NULL) delete _NNS; };
 	// Main funtions
 	Mesh Match (const Mesh& target) const;
@@ -37,7 +37,7 @@ private:
 	MatrixX3d _Vertices;
 	MatrixX2i _Edges;
 	mutable MatrixXd _VT;
-	mutable Nabo::NNSearchD* _NNS=NULL;
+	mutable Nabo::NNSearchD* _NNS;
 	// Not in use. For reference only
 	void _KNN (const RowVector3d& pt, int k, int* idx, double* dist) const;
 	int _Closest (const RowVector3d& pt, double* minDist=NULL) const;
