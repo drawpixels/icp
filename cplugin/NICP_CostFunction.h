@@ -20,6 +20,7 @@ public:
 	int NumParams;
 	
 	EFit_CostFunction (const Deformable& src, const Mesh& tgt, double c=1.0);
+	void SetCoeff (double c) { c_fit=c; };
 	virtual bool Evaluate (double const* const* parameters, double* residuals, double ** jacobians) const;
 };
 
@@ -32,6 +33,7 @@ public:
 	int NumParams;
 	
 	ERigid_CostFunction (const Deformable& src, const Mesh& tgt, double c=1.0);
+	void SetCoeff (double c) { c_rigid=c; };
 	virtual bool Evaluate (double const* const* parameters, double* residuals, double ** jacobians) const;
 };
 
@@ -44,6 +46,7 @@ public:
 	int NumParams;
 	
 	ESmooth_CostFunction (const Deformable& src, const Mesh& tgt, double c=1.0);
+	void SetCoeff (double c) { c_smooth=c; };
 	virtual bool Evaluate (double const* const* parameters, double* residuals, double ** jacobians) const;
 };
 

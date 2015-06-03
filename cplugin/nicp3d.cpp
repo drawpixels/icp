@@ -15,7 +15,8 @@
 #include <ceres/ceres.h>
 #include <maya/MGlobal.h>
 #include <maya/MTypes.h>
-#include <maya/MFnPlugin.h> 
+#include <maya/MFnPlugin.h>
+#include <maya/MArgList.h> 
 #include <maya/MPxCommand.h>
 #include <maya/MSelectionList.h>
 #include <maya/MDagPath.h>
@@ -27,9 +28,11 @@
 #include "Deformable.h"
 #include "NICP_costFunction.h"
 
-#define INIT_C_FIT 5.0
-#define INIT_C_RIGID 50.0
-#define INIT_C_SMOOTH 10.0
+#define DEFAULT_TOL 0.001
+#define DEFAULT_RUN 20
+#define DEFAULT_C_FIT 5.0
+#define DEFAULT_C_RIGID 50.0
+#define DEFAULT_C_SMOOTH 10.0
 
 using namespace std;
 using namespace Eigen;
@@ -44,16 +47,54 @@ private:
 	int GetModels (MDagPath& dag1, MDagPath& dag2, MDagPath& dag3);
 	Mesh GetMesh (const MDagPath dag);
 	VectorXd Initialise (const Mesh& m);
-	Mesh NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol=0.001, int runs=100);
+	Mesh NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int runs, double c_fit, double c_rigid, double c_smooth);
 	void ModifyVertices (MDagPath path, const Mesh& m);
 };
 
 void* nicp3d::creator () { return new nicp3d; }
  
 MStatus nicp3d::doIt (const MArgList& argList) {
+	MStatus status;
 	MDagPath dagSrc, dagS2, dagTgt;
 	char sInfo[500];
 	std::clock_t c_start,c_end;
+	int run; 
+	double c_fit, c_rigid, c_smooth;
+	
+	// Parse command arguments
+	if (argList.length()>=1) {
+		run = argList.asInt(0,&status);
+		if (!status)
+			run = DEFAULT_RUN;
+	} else 
+		run = DEFAULT_RUN;
+	
+	if (argList.length()>=2) {
+		c_fit = argList.asDouble(1,&status);
+		if (!status)
+			c_fit = DEFAULT_C_FIT;
+	} else 
+		c_fit = DEFAULT_C_FIT;
+	
+	if (argList.length()>=3) {
+		c_rigid = argList.asDouble(2,&status);
+		if (!status)
+			c_rigid = DEFAULT_C_RIGID;
+	} else 
+		c_rigid = DEFAULT_C_RIGID;
+	
+	if (argList.length()>=4) {
+		c_smooth = argList.asDouble(3,&status);
+		if (!status)
+			c_smooth = DEFAULT_C_SMOOTH;
+	} else 
+		c_smooth = DEFAULT_C_SMOOTH;
+		
+	std::cout << "RUN = " << run << std::endl;
+	std::cout << "C_FIT = " << c_fit << std::endl;
+	std::cout << "C_RIGID = " << c_rigid << std::endl;
+	std::cout << "C_SMOOTH = " << c_smooth << std::endl;
+	
 	int n = GetModels(dagSrc,dagS2,dagTgt);
 	if (n!=3) {
 		MGlobal::displayInfo("3 models must be selected.");
@@ -74,7 +115,7 @@ MStatus nicp3d::doIt (const MArgList& argList) {
 
 	try {
 		c_start = std::clock();
-		Mesh NN = NICP(mSrc,mTgt,params,0.01,5);
+		Mesh NN = NICP(mSrc,mTgt,params,0.01,run,c_fit,c_rigid,c_smooth);
 		c_end = std::clock();
 		std::cout << "Elapse time = " << (float)(c_end - c_start)/(CLOCKS_PER_SEC) << " sec." << std::endl; 
 		/* DEBUG PRINT *
@@ -159,14 +200,11 @@ VectorXd nicp3d::Initialise (const Mesh& m) {
 	return p;
 }
 
-Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int runs) {
+Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int runs, double c_fit, double c_rigid, double c_smooth) {
 	char sInfo[50000];
 	int nPars = params.rows();
 	int nVerts = src.NumVertices();
-	double e, err = 1000000.0;
-	double c_fit = INIT_C_FIT;
-	double c_rigid = INIT_C_RIGID;
-	double c_smooth = INIT_C_SMOOTH;
+	double e=0, err;
 	Mesh DD, NN;
 	MatrixXd fjac;
 	int info;
@@ -177,7 +215,6 @@ Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int
 	MatrixXd fjac2;
 	VectorXd pbackup=params;
 	for (r=0; r<runs; r++) {
-		e = err;
 		DD = src.Deform(params);
 		NN = DD.Match(tgt);
 		int nVerts = src.NumVertices();
@@ -196,15 +233,18 @@ Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int
 	    ceres::Solver::Summary summary;
 	    ceres::Solve(options, &problem, &summary);
 		std::cout << summary.BriefReport() << std::endl;
-		std::cout << summary.FullReport() << std::endl;
+		//std::cout << summary.FullReport() << std::endl;
 		err = summary.final_cost;
 		std::cout << "run=" << r << " err=" << err << " c=[" << c_fit << "," << c_rigid << "," << c_smooth << "] iter=" << iter << " nfev=" << nfev << " njev=" << njev << std::endl;
-		if ((e-err)<tol) {
-			c_rigid /= 2.0;
-			c_smooth /= 2.0;
-			if ((c_rigid<0.1)||(c_smooth<0.1))
-				break;
+		if (e>0) {
+			if (((e-err)/e)<tol) {
+				c_rigid /= 2.0;
+				c_smooth /= 2.0;
+				if ((c_rigid<0.1)||(c_smooth<0.1))
+					break;
+			}
 		}
+		e = err;
 	}
 	return NN;
 }

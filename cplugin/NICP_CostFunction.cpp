@@ -80,37 +80,42 @@ bool EFit_CostFunction::Evaluate (double const* const* parameters, double* resid
 	}
 	//-- Calculate the Jacobian
 	if (jacobians != NULL) {
-		//std::cout << "Jacobian E-fit\n";
-		//-- Gather common info
+		int idx=0;	//-- Running index to fill up the output values
 		Mesh DL = mSource.Deform(vParams,true);
+		double w;
+		RowVector3d delta;
 		Matrix3d rot, rot_t, drot_dx, drot_dy, drot_dz;
 		rot = Deformable::RotMatrix(vParams(NumParams-6),vParams(NumParams-5),vParams(NumParams-4));
 		rot_t = rot.transpose();
 		Deformable::D_RotMatrix(vParams(NumParams-6),vParams(NumParams-5),vParams(NumParams-4),drot_dx,drot_dy,drot_dz);
-		//-- Calculate Jacobian for a set of local parameters for a vertex
 		for (int i=0; i<nVertices; i++) {
-			if (jacobians[i] != NULL) {
-				for (int j=0; j<nVertices; j++) {
-					double w = mSource.Weights()(i,j);
+			for (int j=0; j<nVertices; j++) {
+				if (jacobians[j] != NULL) {
+					w = mSource.Weights()(j,i);
 					if (w!=0) {
-						RowVector3d delta = mSource.Vertex(j) - mSource.Vertex(i);
-						SetJac (jacobians[i], j*3, 0, -c_fit * w * delta(0) * rot_t, 12);
-						SetJac (jacobians[i], j*3, 3, -c_fit * w * delta(1) * rot_t, 12);
-						SetJac (jacobians[i], j*3, 6, -c_fit * w * delta(2) * rot_t, 12);
-						SetJac (jacobians[i], j*3, 9, -c_fit * w * rot_t, 12);
+						delta = mSource.Vertex(i) - mSource.Vertex(j);
+						SetJac(jacobians[j], i*3, 0, -c_fit * w * delta(0) * rot_t.col(0), 12);
+						SetJac(jacobians[j], i*3, 1, -c_fit * w * delta(0) * rot_t.col(1), 12);
+						SetJac(jacobians[j], i*3, 2, -c_fit * w * delta(0) * rot_t.col(2), 12);
+						SetJac(jacobians[j], i*3, 3, -c_fit * w * delta(1) * rot_t.col(0), 12);
+						SetJac(jacobians[j], i*3, 4, -c_fit * w * delta(1) * rot_t.col(1), 12);
+						SetJac(jacobians[j], i*3, 5, -c_fit * w * delta(1) * rot_t.col(2), 12);
+						SetJac(jacobians[j], i*3, 6, -c_fit * w * delta(2) * rot_t.col(0), 12);
+						SetJac(jacobians[j], i*3, 7, -c_fit * w * delta(2) * rot_t.col(1), 12);
+						SetJac(jacobians[j], i*3, 8, -c_fit * w * delta(2) * rot_t.col(2), 12);
+						SetJac(jacobians[j], i*3, 9, -c_fit * w * rot_t.col(0), 12);
+						SetJac(jacobians[j], i*3,10, -c_fit * w * rot_t.col(1), 12);
+						SetJac(jacobians[j], i*3,11, -c_fit * w * rot_t.col(2), 12);
 					} else {
-						SetJac (jacobians[i], j*3, 0, MatrixXd::Zero(3,12), 12);
+						SetJac(jacobians[j], i*3, 0, MatrixXd::Zero(3,12), 12);
 					}
 				}
 			}
-		}
-		//-- Calculate Jacobian for a set of local parameters for a vertex
-		if (jacobians[nVertices] != NULL) {
-			for (int j=0; j<nVertices; j++) {
-				SetJac (jacobians[nVertices], j*3, 0, -c_fit * (DL.Vertex(j) * drot_dx).transpose(), 6);
-				SetJac (jacobians[nVertices], j*3, 1, -c_fit * (DL.Vertex(j) * drot_dy).transpose(), 6);
-				SetJac (jacobians[nVertices], j*3, 2, -c_fit * (DL.Vertex(j) * drot_dz).transpose(), 6);
-				SetJac (jacobians[nVertices], j*3, 3, (Matrix3d() << -c_fit,0,0, 0,-c_fit,0, 0,0,-c_fit).finished(), 6);
+			if (jacobians[nVertices] != NULL) {
+				SetJac(jacobians[nVertices], i*3, 0, -c_fit * (DL.Vertex(i) * drot_dx).transpose(), 6);
+				SetJac(jacobians[nVertices], i*3, 1, -c_fit * (DL.Vertex(i) * drot_dy).transpose(), 6);
+				SetJac(jacobians[nVertices], i*3, 2, -c_fit * (DL.Vertex(i) * drot_dz).transpose(), 6);
+				SetJac(jacobians[nVertices], i*3, 3, (Matrix3d() << -c_fit,0,0,  0,-c_fit,0,  0,0,-c_fit).finished(), 6);
 			}
 		}
 	}
@@ -200,27 +205,31 @@ bool ESmooth_CostFunction::Evaluate (double const* const* parameters, double* re
 	//-- Calculate the Jacobian
 	if (jacobians != NULL) {
 		//std::cout << "Jacobian E-smooth\n";
-		//-- Calculate Jacobian for a set of local parameters for a vertex
 		for (int i=0; i<nVertices; i++) {
 			if (jacobians[i] != NULL) {
 				//-- Initialise jacobian to zero
 				SetJac (jacobians[i], 0, 0, MatrixXd::Zero(nEdges*6,12), 12);
-				//-- Set jacobian if the vertex is one of the end point of the edge
-				for (int j=0; j<nEdges; j++) {
-					int j0 = mSource.Edge(j)(0);
-					int j1 = mSource.Edge(j)(1);
-					RowVector3d delta = mSource.Vertex(i1) - mSource.Vertex(i0);
-					if (j0==i) {
-						SetJac (jacobians[i], j, 0,	c_smooth * (MatrixXd(3,12) << 
-							delta(0),0,0,  delta(1),0,0,  delta(2),0,0,  1,0,0,
-							0,delta(0),0,  0,delta(1),0,  0,delta(2),0,  0,1,0,
-							0,0,delta(0),  0,0,delta(1),  0,0,delta(2),  0,0,1).finished(), 12);
-					}
-					if (j1==i) {
-						SetJac (jacobians[i], j, 0, (Matrix3d() << 
-							-c_smooth,0,0,  0,-c_smooth,0,  0,0,-c_smooth).finished(), 12);
-					}
-				}
+			}
+		}
+		for (int i=0; i<nEdges; i++) {
+			int i0 = mSource.Edge(i)(0);
+			int i1 = mSource.Edge(i)(1);
+			RowVector3d delta = mSource.Vertex(i1) - mSource.Vertex(i0);
+			if (jacobians[i0]!=NULL) {
+				SetJac (jacobians[i0], i*6, 0, c_smooth * (MatrixXd(3,12) << 
+					delta(0),0,0,  delta(1),0,0,  delta(2),0,0,  1,0,0,
+					0,delta(0),0,  0,delta(1),0,  0,delta(2),0,  0,1,0,
+					0,0,delta(0),  0,0,delta(1),  0,0,delta(2),  0,0,1).finished(), 12);
+				SetJac (jacobians[i0], i*6+3, 9, (Matrix3d() << 
+					-c_smooth,0,0,  0,-c_smooth,0,  0,0,-c_smooth).finished(), 12);
+			}
+			if (jacobians[i1]!=NULL) {
+				SetJac (jacobians[i1], i*6+3, 0, c_smooth * (MatrixXd(3,12) << 
+					-delta(0),0,0,  -delta(1),0,0,  -delta(2),0,0,  1,0,0,
+					0,-delta(0),0,  0,-delta(1),0,  0,-delta(2),0,  0,1,0,
+					0,0,-delta(0),  0,0,-delta(1),  0,0,-delta(2),  0,0,1).finished(), 12);
+				SetJac (jacobians[i1], i*6, 9, (Matrix3d() << 
+				-c_smooth,0,0,  0,-c_smooth,0,  0,0,-c_smooth).finished(), 12);
 			}
 		}
 		//-- Calculate Jacobian for the global parameters
