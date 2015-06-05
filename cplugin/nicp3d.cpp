@@ -229,11 +229,15 @@ Mesh nicp3d::NICP (Deformable& src, Mesh& tgt, VectorXd& params, double tol, int
 		ESmooth_CostFunction* esmooth_costFunction = new ESmooth_CostFunction(src,NN,c_smooth);
 		problem.AddResidualBlock(esmooth_costFunction, NULL, param_blocks);
 		ceres::Solver::Options options;
+		options.sparse_linear_algebra_library_type = ceres::CX_SPARSE;
+		//options.sparse_linear_algebra_library_type = ceres::EIGEN_SPARSE;
+		//options.trust_region_strategy_type = ceres::DOGLEG;
+		//options.dogleg_type = ceres::SUBSPACE_DOGLEG;
 	    options.minimizer_progress_to_stdout = true;
 	    ceres::Solver::Summary summary;
 	    ceres::Solve(options, &problem, &summary);
-		std::cout << summary.BriefReport() << std::endl;
-		//std::cout << summary.FullReport() << std::endl;
+		//std::cout << summary.BriefReport() << std::endl;
+		std::cout << summary.FullReport() << std::endl;
 		err = summary.final_cost;
 		std::cout << "run=" << r << " err=" << err << " c=[" << c_fit << "," << c_rigid << "," << c_smooth << "] iter=" << iter << " nfev=" << nfev << " njev=" << njev << std::endl;
 		if (e>0) {
